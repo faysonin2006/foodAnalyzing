@@ -1,6 +1,20 @@
 spring:
   application:
     name: ApiGateway
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${HOSTNAME:${random.value}}
 
 management:
   endpoints:
@@ -15,7 +29,8 @@ management:
       enabled: true
   tracing:
     sampling:
-          probability: 1.0
+      probability: 1.0
+
 resilience4j:
   circuitbreaker:
     instances:
@@ -28,10 +43,10 @@ resilience4j:
         failure-rate-threshold: 50
         automatic-transition-from-open-to-half-open-enabled: true
         sliding-window-type: count_based
-server:
-  port: 8090
-  address: 0.0.0.0
 
+server:
+  port: ${SERVER_PORT:8090}
+  address: 0.0.0.0
 
 logging:
   file:

@@ -1,64 +1,316 @@
 services:
   postgres:
-    container_name: postgres_container
+    container_name: food_analyzing_postgres
     image: postgres:14
-    shm_size: 1gb
-    command: postgres -c 'max_connections=500'
     environment:
-      POSTGRES_USER: faysonin
-      POSTGRES_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
-      PGDATA: /data/postgres
-    volumes:
-      - postgres:/data/postgres
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
       - backend
     restart: unless-stopped
 
   pgadmin:
-    container_name: pgadmin_container
-    image: dpage/pgadmin4
+    container_name: food_analyzing_pgadmin
+    image: dpage/pgadmin4:8.14
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgaadmin4@pgadmin.org}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
       PGADMIN_CONFIG_SERVER_MODE: 'False'
-    volumes:
-      - pgadmin:/var/lib/pgadmin
     ports:
       - "5050:80"
+    volumes:
+      - pgadmin:/var/lib/pgadmin
     networks:
       - backend
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   rabbitmq:
-    container_name: rabbitmq_container
-    image: rabbitmq:3-management
+    container_name: food_analyzing_rabbitmq
+    image: rabbitmq:3.13-management-alpine
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     volumes:
       - rabbitmq:/var/lib/rabbitmq
-    networks:
-      - backend
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - backend
+    restart: unless-stopped
 
   redis:
-    container_name: redis_container
-    image: redis:alpine
+    container_name: food_analyzing_redis
+    image: redis:7-alpine
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+    restart: unless-stopped
+
+  zipkin:
+    container_name: food_analyzing_zipkin
+    image: openzipkin/zipkin:3
+    ports:
+      - "${ZIPKIN_PORT:-9411}:9411"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9411/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+    restart: unless-stopped
+
+  prometheus:
+    container_name: food_analyzing_prometheus
+    image: prom/prometheus:v2.44.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./docker/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9090/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+    restart: unless-stopped
+
+  grafana:
+    container_name: food_analyzing_grafana
+    image: grafana/grafana:latest
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ./docker/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+    restart: unless-stopped
+
+  eureka:
+    build:
+      context: ./Eureka
+    container_name: food_analyzing_eureka
+    environment:
+      SERVER_PORT: ${EUREKA_PORT:-8761}
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${MANAGEMENT_ZIPKIN_TRACING_ENDPOINT:-http://zipkin:9411/api/v2/spans}
+    ports:
+      - "${EUREKA_PORT:-8761}:8761"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:${EUREKA_PORT:-8761}/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+    networks:
+      - backend
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ./AuthService
+    environment:
+      SERVER_PORT: ${AUTH_SERVICE_PORT:-8091}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${AUTH_DB_NAME:-auth}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-900000}
+      REFRESH_TOKEN_EXPIRATION: ${REFRESH_TOKEN_EXPIRATION:-2592000000}
+      USER_SERVICE_TOKEN: ${USER_SERVICE_TOKEN}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-guest}
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka:8761/eureka/
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${MANAGEMENT_ZIPKIN_TRACING_ENDPOINT:-http://zipkin:9411/api/v2/spans}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+
+  user-service:
+    build:
+      context: ./UserService
+    environment:
+      SERVER_PORT: ${USER_SERVICE_PORT:-8092}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${USER_DB_NAME:-userprofiles}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      JWT_SECRET: ${JWT_SECRET}
+      USER_SERVICE_TOKEN: ${USER_SERVICE_TOKEN}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-guest}
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka:8761/eureka/
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${MANAGEMENT_ZIPKIN_TRACING_ENDPOINT:-http://zipkin:9411/api/v2/spans}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+
+  ai-image-service:
+    build:
+      context: ./AiImageService
+    environment:
+      SERVER_PORT: ${AI_IMAGE_SERVICE_PORT:-8093}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${AI_IMAGE_DB_NAME:-foodanalysis}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      JWT_SECRET: ${JWT_SECRET}
+      USER_SERVICE_TOKEN: ${USER_SERVICE_TOKEN}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-guest}
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka:8761/eureka/
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_REGION: ${S3_REGION}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+      S3_PUBLIC_URL: ${S3_PUBLIC_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3-flash-preview}
+      GEMINI_PROJECT_ID: ${GEMINI_PROJECT_ID}
+      GEMINI_LOCATION: ${GEMINI_LOCATION:-us-central1}
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: ${MANAGEMENT_ZIPKIN_TRACING_ENDPOINT:-http://zipkin:9411/api/v2/spans}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+
+  recipe-service:
+    build:
+      context: ./RecipeService
+    environment:
+      SERVER_PORT: ${RECIPE_SERVICE_PORT:-8094}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${RECIPE_DB_NAME:-recipesspoonacular}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      JWT_SECRET: ${JWT_SECRET}
+      USER_SERVICE_TOKEN: ${USER_SERVICE_TOKEN}
+      SPOONACULAR_API_KEY: ${SPOONACULAR_API_KEY}
+      DEEPL_AUTH_KEY: ${DEEPL_AUTH_KEY}
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka:8761/eureka/
+      MANAGEMENT_TRACING_EXPORT_ZIPKIN_ENDPOINT: ${MANAGEMENT_TRACING_EXPORT_ZIPKIN_ENDPOINT:-http://zipkin:9411/api/v2/spans}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+
+  recipes-from-db-service:
+    build:
+      context: ./RecipesFromDbService
+    environment:
+      SERVER_PORT: ${RECIPES_FROM_DB_SERVICE_PORT:-8095}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${RECIPES_DB_NAME:-recipes}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      JWT_SECRET: ${JWT_SECRET}
+      USER_SERVICE_TOKEN: ${USER_SERVICE_TOKEN}
+      SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${RECIPES_DB_SCHEMA:-cookbook_wh}
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka:8761/eureka/
+      MANAGEMENT_TRACING_EXPORT_ZIPKIN_ENDPOINT: ${MANAGEMENT_TRACING_EXPORT_ZIPKIN_ENDPOINT:-http://zipkin:9411/api/v2/spans}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: ./ApiGateway
+    container_name: food_analyzing_gateway
+    environment:
+      SERVER_PORT: ${API_GATEWAY_PORT:-8090}
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka:8761/eureka/
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-guest}
+      MANAGEMENT_TRACING_EXPORT_ZIPKIN_ENDPOINT: ${MANAGEMENT_TRACING_EXPORT_ZIPKIN_ENDPOINT:-http://zipkin:9411/api/v2/spans}
+    depends_on:
+      eureka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "${API_GATEWAY_PORT:-8090}:8090"
     networks:
       - backend
     restart: unless-stopped
@@ -72,3 +324,5 @@ volumes:
   pgadmin:
   rabbitmq:
   redis_data:
+  grafana_data:
+  prometheus_data:

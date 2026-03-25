@@ -1,11 +1,12 @@
 package com.aiimageservice.controllers;
 
+import com.aiimageservice.controllers.api.FoodAnalysisControllerApi;
 import com.aiimageservice.dtos.FoodAnalysisDetailResponse;
 import com.aiimageservice.dtos.FoodAnalysisResponse;
 import com.aiimageservice.services.FoodAnalysisService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -15,29 +16,28 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/food")
 @RequiredArgsConstructor
-public class FoodAnalysisController {
+public class FoodAnalysisController implements FoodAnalysisControllerApi {
 
     private final FoodAnalysisService service;
 
+    @Override
     @PostMapping("/analyze")
     public ResponseEntity<FoodAnalysisResponse> analyzeFood(
-            @RequestParam("file") MultipartFile file, Authentication authentication,
-            @RequestParam("extraQuestions") String questions
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "extraQuestions", required = false, defaultValue = "") String questions
     ) {
-        String userId = authentication.getName();
-        return ResponseEntity.ok(service.uploadAndAnalyze(file, userId, questions));
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(service.uploadAndAnalyze(file, questions));
     }
 
+    @Override
     @GetMapping("/analysis/{id}")
-    public ResponseEntity<FoodAnalysisDetailResponse> getAnalysis(
-            @PathVariable UUID id,
-            Authentication auth
-    ) {
-        return ResponseEntity.ok(service.getAnalysisById(id, auth.getName()));
+    public ResponseEntity<FoodAnalysisDetailResponse> getAnalysis(@PathVariable UUID id) {
+        return ResponseEntity.ok(service.getAnalysisById(id));
     }
 
+    @Override
     @GetMapping("/history")
-    public ResponseEntity<List<FoodAnalysisResponse>> getHistory(Authentication auth) {
-        return ResponseEntity.ok(service.getUserHistory(auth.getName()));
+    public ResponseEntity<List<FoodAnalysisResponse>> getHistory() {
+        return ResponseEntity.ok(service.getUserHistory());
     }
 }

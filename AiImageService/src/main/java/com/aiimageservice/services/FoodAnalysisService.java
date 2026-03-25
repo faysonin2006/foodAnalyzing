@@ -1,10 +1,18 @@
 package com.aiimageservice.services;
 
-import com.aiimageservice.dtos.*;
-import com.aiimageservice.httpinterfaceconfig.httpuserserviceclient.HttpUserServiceClient;
+import com.aiimageservice.constants.AppMessages;
+import com.aiimageservice.dtos.FoodAnalysisRequest;
+import com.aiimageservice.dtos.FoodAnalysisDetailResponse;
+import com.aiimageservice.dtos.FoodAnalysisResponse;
+import com.aiimageservice.exceptions.AnalysisNotFoundException;
+import com.aiimageservice.exceptions.BadRequestException;
+import com.aiimageservice.exceptions.ForbiddenOperationException;
+import com.aiimageservice.exceptions.StorageException;
+import com.aiimageservice.mappers.FoodAnalysisMapper;
 import com.aiimageservice.models.FoodAnalysis;
 import com.aiimageservice.models.enums.AnalysisStatus;
 import com.aiimageservice.repositories.FoodAnalysisRepository;
+import com.aiimageservice.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,7 +22,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +30,7 @@ public class FoodAnalysisService {
     private final FoodAnalysisRepository repository;
     private final S3Service s3Service;
     private final RabbitTemplate rabbitTemplate;
+    private final FoodAnalysisMapper foodAnalysisMapper;
 
     @Value("${spring.rabbitmq.template.exchange}")
     private String exchange;
@@ -31,13 +39,17 @@ public class FoodAnalysisService {
     private String routingKey;
 
     @Transactional
-    public FoodAnalysisResponse uploadAndAnalyze(MultipartFile file, String userId, String questions) {
-        String imageUrl = "";
+    public FoodAnalysisResponse uploadAndAnalyze(MultipartFile file, String questions) {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException(AppMessages.FILE_MUST_NOT_BE_EMPTY);
+        }
+
+        String userId = SecurityUtils.getCurrentUsername();
+        String imageUrl;
         try {
             imageUrl = s3Service.uploadImage(file, userId);
-        }
-        catch (Exception e) {
-            System.out.println("upload image exception");
+        } catch (Exception ex) {
+            throw new StorageException(AppMessages.FAILED_TO_UPLOAD_IMAGE, ex);
         }
 
         FoodAnalysis analysis = FoodAnalysis.builder()
@@ -45,46 +57,32 @@ public class FoodAnalysisService {
                 .imageUrl(imageUrl)
                 .status(AnalysisStatus.PROCESSING)
                 .build();
-        repository.save(analysis);
+        FoodAnalysis savedAnalysis = repository.save(analysis);
 
-        FoodAnalysisRequest request = new FoodAnalysisRequest(analysis.getId(), imageUrl, userId, questions);
+        FoodAnalysisRequest request = new FoodAnalysisRequest(savedAnalysis.getId(), imageUrl, userId, questions);
         rabbitTemplate.convertAndSend(exchange, routingKey, request);
 
-        return new FoodAnalysisResponse(analysis.getId(), AnalysisStatus.PROCESSING);
+        return foodAnalysisMapper.toResponse(savedAnalysis);
     }
 
-    public FoodAnalysisDetailResponse getAnalysisById(UUID id, String userId) {
+    @Transactional(readOnly = true)
+    public FoodAnalysisDetailResponse getAnalysisById(UUID id) {
+        String userId = SecurityUtils.getCurrentUsername();
         FoodAnalysis analysis = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Analysis not found with id: " + id));
+                .orElseThrow(() -> new AnalysisNotFoundException(AppMessages.ANALYSIS_NOT_FOUND));
 
-        System.out.println(analysis.getUserId());
-        System.out.println(userId);
         if (!analysis.getUserId().equals(userId)) {
-            throw new RuntimeException("Access denied: You cannot view this analysis");
+            throw new ForbiddenOperationException(AppMessages.ACCESS_DENIED);
         }
 
-        return mapToDetailResponse(analysis);
+        return foodAnalysisMapper.toDetailResponse(analysis);
     }
 
-    public List<FoodAnalysisResponse> getUserHistory(String userId) {
+    @Transactional(readOnly = true)
+    public List<FoodAnalysisResponse> getUserHistory() {
+        String userId = SecurityUtils.getCurrentUsername();
         return repository.findByUserIdOrderByCreatedAtDesc(userId).stream()
-                .map(a -> new FoodAnalysisResponse(a.getId(), a.getStatus()))
-                .collect(Collectors.toList());
-    }
-
-    private FoodAnalysisDetailResponse mapToDetailResponse(FoodAnalysis analysis) {
-        return FoodAnalysisDetailResponse.builder()
-                .id(analysis.getId())
-                .imageUrl(analysis.getImageUrl())
-                .status(analysis.getStatus())
-                .dishName(analysis.getDishName())
-                .calories(analysis.getCalories())
-                .protein(analysis.getProtein())
-                .carbs(analysis.getCarbs())
-                .fats(analysis.getFats())
-                .errorMessage(analysis.getErrorMessage())
-                .createdAt(analysis.getCreatedAt())
-                .extraInfo(analysis.getExtraInfo())
-                .build();
+                .map(foodAnalysisMapper::toResponse)
+                .toList();
     }
 }

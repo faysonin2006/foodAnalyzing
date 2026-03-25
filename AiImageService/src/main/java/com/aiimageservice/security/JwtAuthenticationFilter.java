@@ -1,12 +1,13 @@
 package com.aiimageservice.security;
 
-import com.aiimageservice.security.JwtService;
+import com.aiimageservice.httpinterfaceconfig.httpuserserviceclient.HttpUserServiceClient;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -18,9 +19,12 @@ import java.util.ArrayList;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final HttpUserServiceClient userServiceClient;
+
     @Override
     protected void doFilterInternal(
             @NotNull HttpServletRequest request,
@@ -28,34 +32,29 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NotNull FilterChain filterChain
     ) throws ServletException, IOException {
         final String authHeader = request.getHeader("Authorization");
-        final String jwt;
-        final String userEmail;
-
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        jwt = authHeader.substring(7);
+        String token = authHeader.substring(7);
         try {
-            userEmail = jwtService.extractUsername(jwt);
-
-            if (userEmail != null &&
-                    SecurityContextHolder.getContext().getAuthentication() == null) {
-                if (jwtService.isTokenValid(jwt, userEmail)) {
-                    UsernamePasswordAuthenticationToken authToken =
-                            new UsernamePasswordAuthenticationToken(
-                                    userEmail,
-                                    null,
-                                    new ArrayList<>()
-                            );
-                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
-                }
+            String userEmail = jwtService.extractUsername(token);
+            if (userEmail != null
+                    && SecurityContextHolder.getContext().getAuthentication() == null
+                    && jwtService.isTokenValid(token, userEmail)) {
+                userServiceClient.getUserProfileById(userEmail);
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                        userEmail,
+                        null,
+                        new ArrayList<>()
+                );
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authToken);
             }
-        }
-        catch (Exception e) {
-
+        } catch (Exception ex) {
+            log.debug("JWT authentication failed", ex);
+            SecurityContextHolder.clearContext();
         }
 
         filterChain.doFilter(request, response);

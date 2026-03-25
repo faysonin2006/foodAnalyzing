@@ -27,4 +27,7 @@ public class GeminiNutritionData {
 
     @JsonProperty("extra_info")
     private String extraInfo;
+
+    @JsonProperty("extra_questions")
+    private String questions;
 }

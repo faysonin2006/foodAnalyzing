@@ -21,11 +21,11 @@ public class FoodAnalysisController {
 
     @PostMapping("/analyze")
     public ResponseEntity<FoodAnalysisResponse> analyzeFood(
-            @RequestParam("file") MultipartFile file, Authentication authentication
-//            @RequestParam("userId") String userId
+            @RequestParam("file") MultipartFile file, Authentication authentication,
+            @RequestParam("extraQuestions") String questions
     ) {
         String userId = authentication.getName();
-        return ResponseEntity.ok(service.uploadAndAnalyze(file, userId));
+        return ResponseEntity.ok(service.uploadAndAnalyze(file, userId, questions));
     }
 
     @GetMapping("/analysis/{id}")

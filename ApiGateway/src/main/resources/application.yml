@@ -6,13 +6,16 @@ management:
   endpoints:
     web:
       exposure:
-        include: busrefresh
+        include: busrefresh, *
   endpoint:
     health:
       show-details: always
   health:
     circuitbreakers:
       enabled: true
+  tracing:
+    sampling:
+          probability: 1.0
 resilience4j:
   circuitbreaker:
     instances:
@@ -27,3 +30,13 @@ resilience4j:
         sliding-window-type: count_based
 server:
   port: 8090
+  address: 0.0.0.0
+
+
+logging:
+  file:
+    name: logs/${spring.application.name}.log
+  logback:
+    rollingpolicy:
+      max-file-size: 5MB
+      max-history: 7

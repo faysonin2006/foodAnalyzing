@@ -1,0 +1,43 @@
+scrape_configs:
+  - job_name: 'AiImageService'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 3s
+    static_configs:
+      - targets: ['host.docker.internal:8093']
+        labels:
+          application: 'AiImageService'
+  - job_name: 'ApiGateway'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 3s
+    static_configs:
+      - targets: ['host.docker.internal:8090']
+        labels:
+          application: 'ApiGateway'
+  - job_name: 'authService'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 3s
+    static_configs:
+      - targets: ['host.docker.internal:8091']
+        labels:
+          application: 'authService'
+  - job_name: 'recipeService'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 3s
+    static_configs:
+      - targets: [ 'host.docker.internal:8094' ]
+        labels:
+          application: 'recipeService'
+  - job_name: 'recipeFromDbService'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 3s
+    static_configs:
+      - targets: [ 'host.docker.internal:8095' ]
+        labels:
+          application: 'recipeFromDbService'
+  - job_name: 'userService'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 3s
+    static_configs:
+      - targets: [ 'host.docker.internal:8092' ]
+        labels:
+          application: 'userService'

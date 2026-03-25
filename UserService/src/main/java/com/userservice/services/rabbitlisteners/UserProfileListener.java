@@ -1,22 +1,22 @@
 package com.userservice.services.rabbitlisteners;
 
 import com.userservice.dtos.CreateProfileRequest;
-import com.userservice.services.UserProfileService;
+import com.userservice.services.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
 public class UserProfileListener {
 
-    private final UserProfileService userProfileService;
+    private final UserService userService;
 
     @RabbitListener(queues = "${spring.rabbitmq.template.default-receive-queue}")
-    public void handleUserRegistratiob(CreateProfileRequest request) {
+    public void handleUserRegistration(CreateProfileRequest request) {
+
         try {
-            userProfileService.createProfile(request);
+            userService.createProfile(request);
         }
         catch (Exception e) {
             System.err.println("Ошибка при создании профиля: " + e.getMessage());

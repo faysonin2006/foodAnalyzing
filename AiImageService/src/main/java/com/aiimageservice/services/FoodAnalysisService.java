@@ -31,7 +31,7 @@ public class FoodAnalysisService {
     private String routingKey;
 
     @Transactional
-    public FoodAnalysisResponse uploadAndAnalyze(MultipartFile file, String userId) {
+    public FoodAnalysisResponse uploadAndAnalyze(MultipartFile file, String userId, String questions) {
         String imageUrl = "";
         try {
             imageUrl = s3Service.uploadImage(file, userId);
@@ -47,7 +47,7 @@ public class FoodAnalysisService {
                 .build();
         repository.save(analysis);
 
-        FoodAnalysisRequest request = new FoodAnalysisRequest(analysis.getId(), imageUrl, userId);
+        FoodAnalysisRequest request = new FoodAnalysisRequest(analysis.getId(), imageUrl, userId, questions);
         rabbitTemplate.convertAndSend(exchange, routingKey, request);
 
         return new FoodAnalysisResponse(analysis.getId(), AnalysisStatus.PROCESSING);

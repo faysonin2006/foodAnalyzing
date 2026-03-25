@@ -27,34 +27,44 @@ public class GeminiService {
     private final ChatModel chatModel;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public GeminiNutritionData analyzeFood(byte[] imageBytes, UserProfileResponse userProfile) throws Exception {
+    public GeminiNutritionData analyzeFood(byte[] imageBytes, UserProfileResponse userProfile, String questions) throws Exception {
 
         String profileContext = buildProfileContext(userProfile);
 
+        String questionsBlock = (questions != null && !questions.isBlank())
+                ? "\nДОПОЛНИТЕЛЬНЫЕ ВОПРОСЫ ПОЛЬЗОВАТЕЛЯ (ответь на них кратко в extra_info):\n" + questions
+                : "";
+
         String textPrompt = """
-                Ты — профессиональный диетолог и нутрициолог.
-                Твоя задача:
-                1. Определить блюдо на изображении.
-                2. Оценить примерное количество калорий, белков, жиров и углеводов на порцию.
-                3. Дать персональную рекомендацию с учетом профиля пользователя.
+            Ты — профессиональный диетолог и нутрициолог.
+            Твоя задача:
+            1. Определить блюдо на изображении.
+            2. Оценить примерное количество калорий, белков, жиров и углеводов на порцию.
+            3. Дать персональную рекомендацию с учетом профиля пользователя.
+            4. Кратко ответить на вопросы пользователя, если они указаны ниже.
 
-                %s
+            КОНТЕКСТ ПОЛЬЗОВАТЕЛЯ:
+            %s
+            %s
 
-                Требования к ответу:
-                - Если в блюде есть продукты из списка аллергий пользователя, начни extra_info с ПРЕДУПРЕЖДЕНИЯ КРУПНЫМИ БУКВАМИ.
-                - В extra_info дай 2–3 предложения: можно ли этому пользователю есть это блюдо с учетом его цели, веса, уровня активности и заболеваний.
-                - Никакого Markdown, никаких ```json. Ответ должен быть СТРОГО в формате чистого JSON.
+            Требования к ответу:
+            - Если в блюде есть аллергены пользователя, начни поле extra_info с текста "ВНИМАНИЕ: АЛЛЕРГЕН!".
+            - В поле extra_info напиши суммарно 3–5 предложений. Включи туда:
+                а) Рекомендацию (можно ли это есть при текущей цели/весе).
+                б) Прямые и краткие ответы на вопросы пользователя (если они были).
+            - Пиши максимально лаконично, только по существу фото и вопросов.
+            - Никакого Markdown, никаких ```json. Ответ СТРОГО в формате чистого JSON.
 
-                Шаблон JSON ответа:
-                {
-                  "dish_name": "Название блюда",
-                  "calories": 0,
-                  "protein": 0.0,
-                  "carbs": 0.0,
-                  "fats": 0.0,
-                  "extra_info": "Краткая рекомендация..."
-                }
-                """.formatted(profileContext);
+            Шаблон JSON:
+            {
+              "dish_name": "Название блюда",
+              "calories": 0,
+              "protein": 0.0,
+              "carbs": 0.0,
+              "fats": 0.0,
+              "extra_info": "Текст рекомендации и ответы на вопросы..."
+            }
+            """.formatted(profileContext, questionsBlock);
 
         Media media = new Media(MimeTypeUtils.IMAGE_JPEG, new ByteArrayResource(imageBytes));
 

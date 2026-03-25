@@ -8,17 +8,19 @@
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <module name="UserService" />
-        <module name="Eureka" />
         <module name="AuthService" />
         <module name="AiImageService" />
+        <module name="Eureka" />
       </profile>
-      <profile name="Annotation profile for ApiGateway" enabled="true">
+      <profile name="Annotation profile for RecipesFromDbService" enabled="true">
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <processorPath useClasspath="false">
           <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.42/lombok-1.18.42.jar" />
         </processorPath>
+        <module name="RecipesFromDbService" />
+        <module name="RecipeService" />
         <module name="ApiGateway" />
       </profile>
     </annotationProcessing>
@@ -33,6 +35,8 @@
       <module name="AuthService" options="-parameters" />
       <module name="AuthService1" options="-parameters" />
       <module name="Eureka" options="-parameters" />
+      <module name="RecipeService" options="-parameters" />
+      <module name="RecipesFromDbService" options="-parameters" />
       <module name="UserService" options="-parameters" />
     </option>
   </component>

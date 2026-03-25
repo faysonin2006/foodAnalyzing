@@ -1,11 +1,11 @@
 package com.authservice.services;
 
-import com.authservice.config.RabbitConfig;
+import com.authservice.config.exceptionhandlers.exceptions.EmailAlreadyExistsException;
 import com.authservice.dtos.UserAuthResponse;
 import com.authservice.dtos.UserLoginRequest;
 import com.authservice.dtos.UserRegistrationRequest;
 import com.authservice.dtos.profie.CreateProfileRequest;
-import com.authservice.httpinterfaceconfig.userserviceclient.HttpUserServiceClient;
+import com.authservice.config.httpinterfaceconfig.userserviceclient.HttpUserServiceClient;
 import com.authservice.models.RefreshToken;
 import com.authservice.models.UserCredentials;
 import com.authservice.models.enums.Role;
@@ -48,9 +48,12 @@ public class AuthService {
 
     @Value("${spring.rabbitmq.template.routing-key}")
     private String routingKey;
+
+
+    ///   User registry
     public UserAuthResponse register(@Valid UserRegistrationRequest request) {
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-            throw new RuntimeException("Email already exists");
+            throw new EmailAlreadyExistsException("Email already exists");
         }
         var user = UserCredentials.builder()
                 .email(request.getEmail())
@@ -67,6 +70,7 @@ public class AuthService {
                 .userId(user.getId())
                 .email(request.getEmail())
                 .build();
+
 //        userServiceClient.createProfile(profileRequest);
 
         rabbitTemplate.convertAndSend(exchangeName, routingKey, profileRequest);
@@ -74,6 +78,8 @@ public class AuthService {
         return new UserAuthResponse(accessToken, refreshToken.getToken(), expiresIn);
     }
 
+
+    ///   User login in system
     public UserAuthResponse login(@Valid UserLoginRequest request) {
         authenticationManager
                 .authenticate(
@@ -90,6 +96,8 @@ public class AuthService {
         return new UserAuthResponse(accessToken, refreshToken.getToken(), expiresIn);
     }
 
+
+    /// Refresh Access and Refresh tokens
     public UserAuthResponse refreshToken(String refreshToken) {
         return refreshTokenRepository.findByToken(refreshToken)
                 .map(this::verifyExpiration)
@@ -103,6 +111,8 @@ public class AuthService {
 
     }
 
+
+    /// Validating expiration of token
     private RefreshToken verifyExpiration(RefreshToken token) {
         if (token.getExpiryDate().compareTo(Instant.now()) < 0) {
             refreshTokenRepository.delete(token);
@@ -111,6 +121,8 @@ public class AuthService {
         return token;
     }
 
+
+    /// Removing expired tokens from db
     private void removeExpiredTokens(UserCredentials user) {
         var userTokens = refreshTokenRepository.findAllByUser(user);
         if (userTokens.isEmpty()) {
@@ -135,6 +147,9 @@ public class AuthService {
             }
         }
     }
+
+
+    /// Creating refresh token in db
     private RefreshToken createRefreshToken(UserCredentials user) {
         RefreshToken refreshToken = RefreshToken.builder()
                 .user(user)

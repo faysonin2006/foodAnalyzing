@@ -10,6 +10,8 @@
         <option value="$PROJECT_DIR$/AiImageService/pom.xml" />
         <option value="$PROJECT_DIR$/ApiGateway/pom.xml" />
         <option value="$PROJECT_DIR$/AuthService1/pom.xml" />
+        <option value="$PROJECT_DIR$/RecipeService/pom.xml" />
+        <option value="$PROJECT_DIR$/RecipesFromDbService/pom.xml" />
       </list>
     </option>
   </component>

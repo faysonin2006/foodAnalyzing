@@ -17,4 +17,5 @@ public class FoodAnalysisRequest  implements Serializable {
     private UUID analysisId;
     private String imageUrl;
     private String userId;
+    private String questions;
 }

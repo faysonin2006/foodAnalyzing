@@ -30,7 +30,7 @@ public class FoodAnalysisConsumer {
             byte[] img = s3Service.downloadImageByUrl(request.getImageUrl());
 
             UserProfileResponse userProfile = userServiceClient.getUserProfileById(request.getUserId());
-            GeminiNutritionData data = geminiService.analyzeFood(img, userProfile);
+            GeminiNutritionData data = geminiService.analyzeFood(img, userProfile, request.getQuestions());
 
             repository.findById(request.getAnalysisId()).ifPresent(a -> {
                 a.setStatus(AnalysisStatus.COMPLETED);

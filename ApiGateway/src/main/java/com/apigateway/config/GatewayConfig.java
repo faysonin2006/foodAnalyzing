@@ -77,6 +77,34 @@ public class GatewayConfig {
                                         .setMethods(HttpMethod.GET)))
                         .uri("lb://AIIMAGESERVICE")
                 )
+                .route("recipeFromDbService", p -> p
+                        .path("/api/recipes/db/**")
+                        .filters(f -> f
+                                .requestRateLimiter(config -> config
+                                        .setRateLimiter(redisRateLimiter())
+                                        .setKeyResolver(userKeyResolver()))
+                                .circuitBreaker(config -> config
+                                        .setName("mealBreaker")
+                                        .setFallbackUri("forward:/fallback/recipedb"))
+                                .retry(retryConfig -> retryConfig
+                                        .setRetries(3)
+                                        .setMethods(HttpMethod.GET)))
+                        .uri("lb://RECIPESFROMDBSERVICE")
+                )
+                .route("recipeService", p -> p
+                        .path("/api/recipes/**")
+                        .filters(f -> f
+                                .requestRateLimiter(config -> config
+                                        .setRateLimiter(redisRateLimiter())
+                                        .setKeyResolver(userKeyResolver()))
+//                                .circuitBreaker(config -> config
+//                                        .setName("mealBreaker")
+//                                        .setFallbackUri("forward:/fallback/recipe"))
+                                .retry(retryConfig -> retryConfig
+                                        .setRetries(3)
+                                        .setMethods(HttpMethod.GET)))
+                        .uri("lb://RECIPESERVICE")
+                )
                 .build();
     }
 }

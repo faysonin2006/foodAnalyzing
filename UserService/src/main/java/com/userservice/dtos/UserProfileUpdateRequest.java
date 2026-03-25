@@ -17,6 +17,8 @@ import java.util.List;
 public class UserProfileUpdateRequest {
     private Gender gender;
 
+    private String name;
+
     @Past(message = "Date of birth should be in the past")
     private LocalDate dateOfBirth;
     private ActivityLevel activityLevel;

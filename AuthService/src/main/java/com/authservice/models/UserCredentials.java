@@ -23,11 +23,9 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserCredentials implements UserDetails { // Переименовал в UserCredentials для ясности (можно оставить UserModel)
-
+public class UserCredentials {
     @Id
     @Column(name = "id")
-    // ID генерируем здесь, второй сервис будет использовать этот же ID
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
@@ -47,24 +45,4 @@ public class UserCredentials implements UserDetails { // Переименова�
     @UpdateTimestamp
     private LocalDate updatedAt;
 
-    // --- UserDetails Implementation ---
-    @Override
-    public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority(role.name()));
-    }
-
-    @Override
-    public String getPassword() {
-        return passwordHash;
-    }
-
-    @Override
-    public String getUsername() {
-        return email;
-    }
-
-    @Override public boolean isAccountNonExpired() { return true; }
-    @Override public boolean isAccountNonLocked() { return true; }
-    @Override public boolean isCredentialsNonExpired() { return true; }
-    @Override public boolean isEnabled() { return true; }
 }

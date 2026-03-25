@@ -12,7 +12,7 @@ import java.util.List;
 public class FallBackController {
 
     @GetMapping("/fallback/auth")
-    public ResponseEntity<List<String>> productsFallBack() {
+    public ResponseEntity<List<String>> authFallBack() {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Collections.singletonList("Authentication service is unavailable, please try again later"));
     }
@@ -22,8 +22,18 @@ public class FallBackController {
                 .body(Collections.singletonList("User service is unavailable, please try again later"));
     }
     @GetMapping("/fallback/food")
-    public ResponseEntity<List<String>> ordersFallBack() {
+    public ResponseEntity<List<String>> foodFallBack() {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Collections.singletonList("AIImage service is unavailable, please try again later"));
+    }
+    @GetMapping("/fallback/recipe")
+    public ResponseEntity<List<String>> recipeFallBack() {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Collections.singletonList("Recipe service is unavailable, please try again later"));
+    }
+    @GetMapping("/fallback/recipedb")
+    public ResponseEntity<List<String>> recipeBDFallBack() {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Collections.singletonList("Recipe service is unavailable, please try again later"));
     }
 }

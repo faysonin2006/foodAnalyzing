@@ -1,11 +1,13 @@
 package com.userservice.security;
 
+import com.userservice.repositories.UserProfileRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -20,9 +22,11 @@ import java.util.List;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final UserProfileRepository userProfileRepository;
 
     @Value("${userservice.service-token}")
     private String serviceToken;
@@ -34,48 +38,41 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NotNull FilterChain filterChain
     ) throws ServletException, IOException {
         final String authHeader = request.getHeader("Authorization");
-        final String jwt;
-        final String userEmail;
-
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        jwt = authHeader.substring(7);
-
-        if (jwt.equals(serviceToken)) {
-            UsernamePasswordAuthenticationToken serviceAuth =
-                    new UsernamePasswordAuthenticationToken(
-                            "INTERNAL_SERVICE",
-                            null,
-                            List.of(new SimpleGrantedAuthority("ROLE_SERVICE"))
-                    );
+        String token = authHeader.substring(7);
+        if (token.equals(serviceToken)) {
+            UsernamePasswordAuthenticationToken serviceAuth = new UsernamePasswordAuthenticationToken(
+                    "INTERNAL_SERVICE",
+                    null,
+                    List.of(new SimpleGrantedAuthority("ROLE_SERVICE"))
+            );
             serviceAuth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(serviceAuth);
-
             filterChain.doFilter(request, response);
             return;
         }
 
         try {
-            userEmail = jwtService.extractUsername(jwt);
-
-            if (userEmail != null &&
-                    SecurityContextHolder.getContext().getAuthentication() == null) {
-                if (jwtService.isTokenValid(jwt, userEmail)) {
-                    UsernamePasswordAuthenticationToken authToken =
-                            new UsernamePasswordAuthenticationToken(
-                                    userEmail,
-                                    null,
-                                    new ArrayList<>()
-                            );
-                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
-                }
+            String userEmail = jwtService.extractUsername(token);
+            if (userEmail != null
+                    && SecurityContextHolder.getContext().getAuthentication() == null
+                    && jwtService.isTokenValid(token, userEmail)
+                    && userProfileRepository.existsByEmail(userEmail)) {
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                        userEmail,
+                        null,
+                        new ArrayList<>()
+                );
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authToken);
             }
-        }
-        catch (Exception e) {
+        } catch (Exception ex) {
+            log.debug("JWT authentication failed", ex);
+            SecurityContextHolder.clearContext();
         }
 
         filterChain.doFilter(request, response);

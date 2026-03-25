@@ -1,37 +1,49 @@
 package com.userservice.services;
 
+import com.userservice.constants.AppMessages;
 import com.userservice.dtos.CreateProfileRequest;
 import com.userservice.dtos.UserProfileResponse;
 import com.userservice.dtos.UserProfileUpdateRequest;
 import com.userservice.dtos.likes.LikeActionResponse;
 import com.userservice.dtos.likes.LikedRecipeResponse;
-import com.userservice.models.*;
+import com.userservice.exceptions.BadRequestException;
+import com.userservice.exceptions.ProfileNotFoundException;
+import com.userservice.mappers.UserProfileMapper;
+import com.userservice.models.AllergyModel;
+import com.userservice.models.DietPreferenceModel;
+import com.userservice.models.HealthConditionModel;
+import com.userservice.models.UserLikesModel;
+import com.userservice.models.UserProfile;
 import com.userservice.models.enums.ActivityLevel;
 import com.userservice.models.enums.Gender;
 import com.userservice.models.enums.GoalType;
-import com.userservice.repositories.*;
+import com.userservice.repositories.UserAllergyRepository;
+import com.userservice.repositories.UserDietRepository;
+import com.userservice.repositories.UserHealthConditionRepository;
+import com.userservice.repositories.UserLikesRepository;
+import com.userservice.repositories.UserProfileRepository;
+import com.userservice.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.annotation.Profile;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.Period;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class UserService {
+
+    private static final int MIN_TARGET_CALORIES = 1200;
+
     private final UserProfileRepository profileRepository;
     private final UserAllergyRepository allergyRepository;
     private final UserDietRepository dietRepository;
     private final UserHealthConditionRepository healthConditionRepository;
     private final UserLikesRepository likesRepository;
+    private final UserProfileMapper userProfileMapper;
 
     @Transactional
     public void createProfile(CreateProfileRequest request) {
@@ -39,31 +51,93 @@ public class UserService {
             return;
         }
 
-        var profile = UserProfile.builder()
+        UserProfile profile = UserProfile.builder()
                 .id(request.getUserId())
                 .email(request.getEmail())
                 .build();
         profileRepository.save(profile);
     }
 
+    @Transactional(readOnly = true)
+    public UserProfileResponse getCurrentProfile() {
+        return getProfileByEmail(SecurityUtils.getCurrentUsername());
+    }
+
+    @Transactional(readOnly = true)
     public UserProfileResponse getProfileByEmail(String email) {
-        var profile = profileRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Profile not found"));
-        return mapToResponse(profile);
+        return userProfileMapper.toResponse(findProfileByEmail(email));
+    }
+
+    @Transactional
+    public UserProfileResponse updateCurrentProfile(UserProfileUpdateRequest request) {
+        return updateProfile(SecurityUtils.getCurrentUsername(), request);
     }
 
     @Transactional
     public UserProfileResponse updateProfile(String email, UserProfileUpdateRequest request) {
-        var profile = profileRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Profile not found"));
-        if (request.getHeight() != null) profile.setHeight(request.getHeight());
-        if (request.getWeight() != null) profile.setWeight(request.getWeight());
-        if (request.getGender() != null) profile.setGender(request.getGender());
-        if (request.getName() != null) profile.setName(request.getName());
-        if (request.getDateOfBirth() != null) profile.setDateOfBirth(request.getDateOfBirth());
-        if (request.getActivityLevel() != null) profile.setActivityLevel(request.getActivityLevel());
-        if (request.getGoalType() != null) profile.setGoalType(request.getGoalType());
+        UserProfile profile = findProfileByEmail(email);
+        userProfileMapper.updateProfileFromRequest(request, profile);
+        applyReferenceCollections(profile, request);
+        calculateAndSetCalories(profile);
+        return userProfileMapper.toResponse(profileRepository.save(profile));
+    }
 
+    @Transactional
+    public LikeActionResponse createLike(Long recipeId) {
+        validateRecipeId(recipeId);
+        UUID userId = resolveUserIdByEmail(SecurityUtils.getCurrentUsername());
+        int inserted = likesRepository.insertIgnore(UUID.randomUUID(), userId, recipeId);
+        UserLikesModel row = likesRepository.findByUserIdAndRecipeId(userId, recipeId)
+                .orElseThrow(() -> new IllegalStateException(AppMessages.LIKE_ROW_MISSING));
+
+        return LikeActionResponse.builder()
+                .recipeId(recipeId)
+                .liked(true)
+                .changed(inserted > 0)
+                .createdAt(row.getCreatedAt())
+                .build();
+    }
+
+    @Transactional
+    public LikeActionResponse removeLike(Long recipeId) {
+        validateRecipeId(recipeId);
+        UUID userId = resolveUserIdByEmail(SecurityUtils.getCurrentUsername());
+        boolean changed = likesRepository.deleteByUserIdAndRecipeId(userId, recipeId) > 0;
+
+        return LikeActionResponse.builder()
+                .recipeId(recipeId)
+                .liked(false)
+                .changed(changed)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public List<LikedRecipeResponse> getAllLikes() {
+        UUID userId = resolveUserIdByEmail(SecurityUtils.getCurrentUsername());
+        return likesRepository.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
+                .map(like -> LikedRecipeResponse.builder()
+                        .recipeId(like.getRecipeId())
+                        .createdAt(like.getCreatedAt())
+                        .build())
+                .toList();
+    }
+
+    private void validateRecipeId(Long recipeId) {
+        if (recipeId == null || recipeId <= 0) {
+            throw new BadRequestException(AppMessages.INVALID_RECIPE_ID);
+        }
+    }
+
+    private UserProfile findProfileByEmail(String email) {
+        return profileRepository.findByEmail(email)
+                .orElseThrow(() -> new ProfileNotFoundException(AppMessages.PROFILE_NOT_FOUND));
+    }
+
+    private UUID resolveUserIdByEmail(String email) {
+        return findProfileByEmail(email).getId();
+    }
+
+    private void applyReferenceCollections(UserProfile profile, UserProfileUpdateRequest request) {
         if (request.getAllergies() != null) {
             List<AllergyModel> allergies = allergyRepository.findAllById(request.getAllergies());
             profile.setAllergies(allergies);
@@ -78,39 +152,27 @@ public class UserService {
             List<HealthConditionModel> conditions = healthConditionRepository.findAllById(request.getHealthConditions());
             profile.setHealthConditions(conditions);
         }
-        calculateAndSetCalories(profile);
-
-        profileRepository.save(profile);
-
-        return mapToResponse(profile);
-
     }
 
     private void calculateAndSetCalories(UserProfile profile) {
-        if (profile.getWeight() == null || profile.getHeight() == null ||
-                profile.getDateOfBirth() == null || profile.getGender() == null ||
-                profile.getActivityLevel() == null || profile.getGoalType() == null) {
+        if (profile.getWeight() == null
+                || profile.getHeight() == null
+                || profile.getDateOfBirth() == null
+                || profile.getGender() == null
+                || profile.getActivityLevel() == null
+                || profile.getGoalType() == null) {
             return;
         }
 
-        int age = Period.between(
-                profile.getDateOfBirth(),
-                LocalDate.now()
-        ).getYears();
+        int age = Period.between(profile.getDateOfBirth(), LocalDate.now()).getYears();
+        double bmr = profile.getGender() == Gender.MALE
+                ? (10 * profile.getWeight()) + (6.25 * profile.getHeight()) - (5 * age) + 5
+                : (10 * profile.getWeight()) + (6.25 * profile.getHeight()) - (5 * age) - 161;
 
-        double bmr;
-        if (profile.getGender().equals(Gender.MALE)) {
-            bmr = (10 * profile.getWeight()) + (6.25 * profile.getHeight()) - (5 * age) + 5;
-        } else {
-            bmr = (10 * profile.getWeight()) + (6.25 * profile.getHeight()) - (5 * age) - 161;
-        }
-
-        int targetCalories = getTargetCalories(profile, bmr);
-
-        profile.setTargetCaloriesPerDay(targetCalories);
+        profile.setTargetCaloriesPerDay(getTargetCalories(profile, bmr));
     }
 
-    private static int getTargetCalories(UserProfile profile, double bmr) {
+    private int getTargetCalories(UserProfile profile, double bmr) {
         double activityMultiplier = switch (profile.getActivityLevel()) {
             case SEDENTARY -> ActivityLevel.SEDENTARY.getMultiplier();
             case LIGHTLY_ACTIVE -> ActivityLevel.LIGHTLY_ACTIVE.getMultiplier();
@@ -126,83 +188,6 @@ public class UserService {
         };
 
         int targetCalories = (int) ((bmr * activityMultiplier) * (1 + goalAdjustment));
-
-        if (targetCalories < 1200) {
-            targetCalories = 1200;
-        }
-        return targetCalories;
-    }
-
-    private UUID resolveUserIdByEmail(String email) {
-        return profileRepository.findByEmail(email)
-                .map(UserProfile::getId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
-    }
-
-    @Transactional
-    public LikeActionResponse createLike(String email, Long recipeId) {
-        if (recipeId == null || recipeId <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid recipeId");
-        }
-
-        UUID userId = resolveUserIdByEmail(email);
-
-        int inserted = likesRepository.insertIgnore(UUID.randomUUID(), userId, recipeId);
-
-        UserLikesModel row = likesRepository.findByUserIdAndRecipeId(userId, recipeId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.INTERNAL_SERVER_ERROR, "Like row missing"));
-
-        return LikeActionResponse.builder()
-                .recipeId(recipeId)
-                .liked(true)
-                .changed(inserted > 0)
-                .createdAt(row.getCreatedAt())
-                .build();
-    }
-
-    @Transactional
-    public LikeActionResponse removeLike(String email, Long recipeId) {
-        if (recipeId == null || recipeId <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid recipeId");
-        }
-
-        UUID userId = resolveUserIdByEmail(email);
-        boolean changed = likesRepository.deleteByUserIdAndRecipeId(userId, recipeId) > 0;
-
-        return LikeActionResponse.builder()
-                .recipeId(recipeId)
-                .liked(false)
-                .changed(changed)
-                .build();
-    }
-
-    @Transactional(readOnly = true)
-    public List<LikedRecipeResponse> getAllLikes(String email) {
-        UUID userId = resolveUserIdByEmail(email);
-        return likesRepository.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
-                .map(l -> LikedRecipeResponse.builder()
-                        .recipeId(l.getRecipeId())
-                        .createdAt(l.getCreatedAt())
-                        .build())
-                .toList();
-    }
-
-    private UserProfileResponse mapToResponse(UserProfile profile) {
-        return UserProfileResponse.builder()
-                .id(profile.getId())
-                .name(profile.getName())
-                .email(profile.getEmail())
-                .activityLevel(profile.getActivityLevel())
-                .allergies(profile.getAllergies())
-                .gender(profile.getGender())
-                .dateOfBirth(profile.getDateOfBirth())
-                .dietPreferences(profile.getDietPreferences())
-                .healthConditions(profile.getHealthConditions())
-                .height(profile.getHeight())
-                .weight(profile.getWeight())
-                .targetCalories(profile.getTargetCaloriesPerDay())
-                .goalType(profile.getGoalType())
-                .build();
+        return Math.max(targetCalories, MIN_TARGET_CALORIES);
     }
 }

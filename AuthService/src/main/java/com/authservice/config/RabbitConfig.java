@@ -1,10 +1,16 @@
 package com.authservice.config;
 
-import org.springframework.amqp.core.*;
+import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.ExchangeBuilder;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -24,25 +30,17 @@ public class RabbitConfig {
 
     @Bean
     public Queue queue() {
-        return QueueBuilder
-                .durable(queueName)
-                .build();
+        return QueueBuilder.durable(queueName).build();
     }
 
     @Bean
     public TopicExchange exchange() {
-        return ExchangeBuilder
-                .topicExchange(exchangeName)
-                .durable(true)
-                .build();
+        return ExchangeBuilder.topicExchange(exchangeName).durable(true).build();
     }
 
     @Bean
     public Binding binding() {
-        return BindingBuilder
-                .bind(queue())
-                .to(exchange())
-                .with(routingKey);
+        return BindingBuilder.bind(queue()).to(exchange()).with(routingKey);
     }
 
     @Bean
@@ -54,7 +52,7 @@ public class RabbitConfig {
 
     @Bean
     public MessageConverter messageConverter() {
-        return new JacksonJsonMessageConverter();
+        return new Jackson2JsonMessageConverter();
     }
 
     @Bean

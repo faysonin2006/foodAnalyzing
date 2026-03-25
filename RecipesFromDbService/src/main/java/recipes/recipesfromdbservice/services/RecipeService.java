@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import recipes.recipesfromdbservice.configs.exceptionhandler.exceptions.BadRequestException;
 import recipes.recipesfromdbservice.configs.exceptionhandler.exceptions.RecipeNotFoundException;
+import recipes.recipesfromdbservice.constants.AppMessages;
 import recipes.recipesfromdbservice.dtos.CardFullRecipeResponse;
 import recipes.recipesfromdbservice.dtos.CardRecipeRequest;
 import recipes.recipesfromdbservice.dtos.CardRecipeResponse;
@@ -27,7 +28,7 @@ public class RecipeService {
 
     public List<CardRecipeResponse> getRecipes(CardRecipeRequest request){
         if (request == null){
-            throw new BadRequestException("Request can't be null");
+            throw new BadRequestException(AppMessages.REQUEST_MUST_NOT_BE_NULL);
         }
         String lang = request.getLang() == null ? "en" : request.getLang().getLowerCaseString();
         int size = request.getSize() == null ? 10 : Math.max(1, Math.min(request.getSize(), 20));
@@ -110,11 +111,11 @@ public class RecipeService {
 
     public CardFullRecipeResponse getRecipe(Long id) {
         if (id == null || id <= 0) {
-            throw new BadRequestException("Recipe id must be positive");
+            throw new BadRequestException(AppMessages.RECIPE_ID_MUST_BE_POSITIVE);
         }
 
         CardFullRecipeRow row = recipeRepository.getFullRecipeInfo(id)
-                .orElseThrow(() -> new RecipeNotFoundException("Recipe not found: " + id));
+                .orElseThrow(() -> new RecipeNotFoundException(AppMessages.RECIPE_NOT_FOUND_PREFIX + id));
 
         return toCardFullRecipeResponse(row);
     }
@@ -150,4 +151,3 @@ public class RecipeService {
         return result.equals("asc") ? "asc" : "desc";
     }
 }
-

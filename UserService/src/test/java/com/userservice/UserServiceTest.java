@@ -1,16 +1,16 @@
 package com.userservice;
 
-import com.userservice.dtos.UserProfileResponse;
-import com.userservice.dtos.likes.LikeActionResponse;
-import com.userservice.exceptions.BadRequestException;
-import com.userservice.mappers.UserProfileMapper;
-import com.userservice.models.UserProfile;
-import com.userservice.repositories.UserAllergyRepository;
-import com.userservice.repositories.UserDietRepository;
-import com.userservice.repositories.UserHealthConditionRepository;
-import com.userservice.repositories.UserLikesRepository;
-import com.userservice.repositories.UserProfileRepository;
-import com.userservice.services.UserService;
+import com.userservice.profile.dto.UserProfileResponse;
+import com.userservice.profile.dto.likes.LikeActionResponse;
+import com.userservice.common.exceptions.BadRequestException;
+import com.userservice.profile.mapper.UserProfileMapper;
+import com.userservice.profile.model.UserProfile;
+import com.userservice.profile.repository.UserAllergyRepository;
+import com.userservice.profile.repository.UserDietRepository;
+import com.userservice.profile.repository.UserHealthConditionRepository;
+import com.userservice.profile.repository.UserLikesRepository;
+import com.userservice.profile.repository.UserProfileRepository;
+import com.userservice.profile.service.UserService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -45,6 +45,13 @@ scrape_configs:
         labels:
           application: 'RecipeService'
 
+  - job_name: 'household-service'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['household-service:8096']
+        labels:
+          application: 'HouseholdService'
+
   - job_name: 'recipes-from-db-service'
     metrics_path: '/actuator/prometheus'
     static_configs:

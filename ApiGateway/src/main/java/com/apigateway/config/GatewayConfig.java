@@ -29,7 +29,7 @@ public class GatewayConfig {
 
     @Bean
     public RedisRateLimiter redisRateLimiter() {
-        return new RedisRateLimiter(10, 20, 10);
+        return new RedisRateLimiter(100, 200, 1);
     }
 
     @Bean
@@ -43,11 +43,78 @@ public class GatewayConfig {
                                         .setKeyResolver(userKeyResolver()))
                                 .circuitBreaker(config -> config
                                         .setName("mealBreaker")
+                                        .setFallbackUri("forward:/fallback/profiles")))
+                        .uri("lb://USERSERVICE")
+                )
+                .route("userPantryService", p -> p
+                        .path("/api/pantry/**")
+                        .filters(f -> f
+                                .requestRateLimiter(config -> config
+                                        .setRateLimiter(redisRateLimiter())
+                                        .setKeyResolver(userKeyResolver()))
+                                .circuitBreaker(config -> config
+                                        .setName("mealBreaker")
                                         .setFallbackUri("forward:/fallback/profiles"))
                                 .retry(retryConfig -> retryConfig
                                         .setRetries(3)
                                         .setMethods(HttpMethod.GET)))
                         .uri("lb://USERSERVICE")
+                )
+                .route("userMealsService", p -> p
+                        .path("/api/meals/**")
+                        .filters(f -> f
+                                .requestRateLimiter(config -> config
+                                        .setRateLimiter(redisRateLimiter())
+                                        .setKeyResolver(userKeyResolver()))
+                                .circuitBreaker(config -> config
+                                        .setName("mealBreaker")
+                                        .setFallbackUri("forward:/fallback/profiles"))
+                                .retry(retryConfig -> retryConfig
+                                        .setRetries(3)
+                                        .setMethods(HttpMethod.GET)))
+                        .uri("lb://USERSERVICE")
+                )
+                .route("userShoppingService", p -> p
+                        .path("/api/shopping-lists/**")
+                        .filters(f -> f
+                                .requestRateLimiter(config -> config
+                                        .setRateLimiter(redisRateLimiter())
+                                        .setKeyResolver(userKeyResolver()))
+                                .circuitBreaker(config -> config
+                                        .setName("mealBreaker")
+                                        .setFallbackUri("forward:/fallback/profiles"))
+                                .retry(retryConfig -> retryConfig
+                                        .setRetries(3)
+                                        .setMethods(HttpMethod.GET)))
+                        .uri("lb://USERSERVICE")
+                )
+                .route("userAnalyticsService", p -> p
+                        .path("/api/analytics/**")
+                        .filters(f -> f
+                                .requestRateLimiter(config -> config
+                                        .setRateLimiter(redisRateLimiter())
+                                        .setKeyResolver(userKeyResolver()))
+                                .circuitBreaker(config -> config
+                                        .setName("mealBreaker")
+                                        .setFallbackUri("forward:/fallback/profiles"))
+                                .retry(retryConfig -> retryConfig
+                                        .setRetries(3)
+                                        .setMethods(HttpMethod.GET)))
+                        .uri("lb://USERSERVICE")
+                )
+                .route("householdService", p -> p
+                        .path("/api/households/**")
+                        .filters(f -> f
+                                .requestRateLimiter(config -> config
+                                        .setRateLimiter(redisRateLimiter())
+                                        .setKeyResolver(userKeyResolver()))
+                                .circuitBreaker(config -> config
+                                        .setName("householdBreaker")
+                                        .setFallbackUri("forward:/fallback/profiles"))
+                                .retry(retryConfig -> retryConfig
+                                        .setRetries(3)
+                                        .setMethods(HttpMethod.GET)))
+                        .uri("lb://HOUSEHOLDSERVICE")
                 )
                 .route("authService", p -> p
                         .path("/api/auth/**")
@@ -83,16 +150,13 @@ public class GatewayConfig {
                                 .requestRateLimiter(config -> config
                                         .setRateLimiter(redisRateLimiter())
                                         .setKeyResolver(userKeyResolver()))
-                                .circuitBreaker(config -> config
-                                        .setName("mealBreaker")
-                                        .setFallbackUri("forward:/fallback/recipedb"))
                                 .retry(retryConfig -> retryConfig
                                         .setRetries(3)
                                         .setMethods(HttpMethod.GET)))
                         .uri("lb://RECIPESFROMDBSERVICE")
                 )
                 .route("recipeService", p -> p
-                        .path("/api/recipes/**")
+                        .path("/api/recipes/search", "/api/recipes/search/*/instructions", "/api/recipes/recommendations", "/api/recipes/*/shopping-list")
                         .filters(f -> f
                                 .requestRateLimiter(config -> config
                                         .setRateLimiter(redisRateLimiter())

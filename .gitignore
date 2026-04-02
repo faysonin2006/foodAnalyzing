@@ -32,3 +32,10 @@ additional/evaluate-prometheus/.data/
 # Editor temp files
 *.swp
 *.swo
+
+# Local ML/runtime artifacts
+RecipeSearchMlService/app/__pycache__/
+RecipeSearchMlService/model/current/
+RecipeSearchMlService/model/corpus.jsonl
+RecipeSearchMlService/model/*.weights.h5
+HouseholdService/logs/

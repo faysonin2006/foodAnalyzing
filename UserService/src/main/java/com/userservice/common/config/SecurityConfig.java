@@ -36,6 +36,9 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/profiles").permitAll()
                         .requestMatchers("/api/profiles/internal/**").hasRole("SERVICE")
+                        .requestMatchers("/api/pantry/internal/**").hasRole("SERVICE")
+                        .requestMatchers("/api/meals/internal/**").hasRole("SERVICE")
+                        .requestMatchers("/api/shopping-lists/internal/**").hasRole("SERVICE")
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(exceptions -> exceptions

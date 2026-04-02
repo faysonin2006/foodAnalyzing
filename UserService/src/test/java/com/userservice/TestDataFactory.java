@@ -1,13 +1,13 @@
 package com.userservice;
 
-import com.userservice.profile.dto.UserProfileUpdateRequest;
-import com.userservice.profile.model.AllergyModel;
-import com.userservice.profile.model.UserLikesModel;
-import com.userservice.profile.model.UserProfile;
-import com.userservice.profile.model.enums.ActivityLevel;
-import com.userservice.profile.model.enums.Allergy;
-import com.userservice.profile.model.enums.Gender;
-import com.userservice.profile.model.enums.GoalType;
+import com.userservice.dtos.UserProfileUpdateRequest;
+import com.userservice.models.AllergyModel;
+import com.userservice.models.UserLikesModel;
+import com.userservice.models.UserProfile;
+import com.userservice.models.enums.ActivityLevel;
+import com.userservice.models.enums.Allergy;
+import com.userservice.models.enums.Gender;
+import com.userservice.models.enums.GoalType;
 import lombok.experimental.UtilityClass;
 
 import java.time.LocalDate;

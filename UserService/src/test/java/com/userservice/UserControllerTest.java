@@ -1,17 +1,18 @@
 package com.userservice;
 
-import com.userservice.profile.controller.UserController;
-import com.userservice.profile.dto.UserProfileResponse;
-import com.userservice.profile.dto.likes.LikeActionResponse;
-import com.userservice.common.security.JwtAuthenticationFilter;
-import com.userservice.common.security.RestAccessDeniedHandler;
-import com.userservice.common.security.RestAuthenticationEntryPoint;
-import com.userservice.profile.service.UserService;
+import com.userservice.controllers.UserController;
+import com.userservice.dtos.UserProfileResponse;
+import com.userservice.dtos.likes.LikeActionResponse;
+import com.userservice.security.JwtAuthenticationFilter;
+import com.userservice.security.RestAccessDeniedHandler;
+import com.userservice.security.RestAuthenticationEntryPoint;
+import com.userservice.services.UserService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.Mockito.when;

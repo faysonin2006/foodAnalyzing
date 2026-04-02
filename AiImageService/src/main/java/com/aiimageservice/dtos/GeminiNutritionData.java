@@ -25,6 +25,12 @@ public class GeminiNutritionData {
     @JsonProperty("fats")
     private Double fats;
 
+    @JsonProperty("is_food")
+    private Boolean foodDetected;
+
+    @JsonProperty("health_score")
+    private Integer healthScore;
+
     @JsonProperty("extra_info")
     private String extraInfo;
 

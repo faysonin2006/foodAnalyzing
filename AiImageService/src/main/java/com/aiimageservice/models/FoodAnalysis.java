@@ -57,11 +57,23 @@ public class FoodAnalysis {
     @Column(name = "fats")
     private Double fats;
 
+    @Column(name = "is_food")
+    private Boolean foodDetected;
+
+    @Column(name = "health_score")
+    private Integer healthScore;
+
     @Column(name = "extra_info", columnDefinition = "TEXT")
     private String extraInfo;
 
     @Column(name = "error_message")
     private String errorMessage;
+
+    @Column(name = "saved_meal_id")
+    private UUID savedMealId;
+
+    @Column(name = "saved_at")
+    private LocalDateTime savedAt;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

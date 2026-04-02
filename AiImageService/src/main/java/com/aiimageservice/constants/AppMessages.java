@@ -14,4 +14,8 @@ public class AppMessages {
     public static final String AUTHENTICATION_REQUIRED = "Authentication is required";
     public static final String FILE_MUST_NOT_BE_EMPTY = "File must not be empty";
     public static final String FAILED_TO_UPLOAD_IMAGE = "Failed to upload image";
+    public static final String ANALYSIS_NOT_COMPLETED = "Analysis is not completed";
+    public static final String ANALYSIS_ALREADY_SAVED = "Analysis is already saved";
+    public static final String FAILED_TO_SAVE_MEAL = "Failed to save meal";
+    public static final String ANALYSIS_RESULT_IS_INCOMPLETE = "Analysis result is incomplete";
 }

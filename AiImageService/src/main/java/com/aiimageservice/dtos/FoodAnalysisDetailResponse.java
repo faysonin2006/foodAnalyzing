@@ -18,7 +18,11 @@ public class FoodAnalysisDetailResponse {
     private Double protein;
     private Double carbs;
     private Double fats;
+    private Boolean foodDetected;
+    private Integer healthScore;
     private String errorMessage;
     private LocalDateTime createdAt;
     private String extraInfo;
+    private UUID savedMealId;
+    private LocalDateTime savedAt;
 }

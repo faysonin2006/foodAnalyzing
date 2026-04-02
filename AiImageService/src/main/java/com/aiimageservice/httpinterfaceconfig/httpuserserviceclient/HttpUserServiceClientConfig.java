@@ -25,4 +25,19 @@ public class HttpUserServiceClientConfig {
         HttpServiceProxyFactory factory = HttpServiceProxyFactory.builderFor(restClientAdapter).build();
         return factory.createClient(HttpUserServiceClient.class);
     }
+
+    @Bean
+    public HttpUserMealsClient httpUserMealsClient(@LoadBalanced RestClient.Builder builder,
+                                                   @Value("${userservice.service-token}") String serviceToken) {
+        RestClient restClient = builder
+                .baseUrl("http://userService")
+                .requestInterceptor(((request, body, execution) -> {
+                    request.getHeaders().setBearerAuth(serviceToken);
+                    return execution.execute(request, body);
+                }))
+                .build();
+        RestClientAdapter restClientAdapter = RestClientAdapter.create(restClient);
+        HttpServiceProxyFactory factory = HttpServiceProxyFactory.builderFor(restClientAdapter).build();
+        return factory.createClient(HttpUserMealsClient.class);
+    }
 }

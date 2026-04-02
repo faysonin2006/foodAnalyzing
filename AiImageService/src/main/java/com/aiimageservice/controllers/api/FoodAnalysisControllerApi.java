@@ -2,6 +2,8 @@ package com.aiimageservice.controllers.api;
 
 import com.aiimageservice.dtos.FoodAnalysisDetailResponse;
 import com.aiimageservice.dtos.FoodAnalysisResponse;
+import com.aiimageservice.dtos.SaveFoodAnalysisRequest;
+import com.aiimageservice.dtos.SaveFoodAnalysisResponse;
 import com.aiimageservice.exceptions.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -12,8 +14,11 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -45,10 +50,37 @@ public interface FoodAnalysisControllerApi {
             @Parameter(description = "Analysis identifier", example = "54b35d30-1d29-4d6b-9850-39d0fbbddc2e") @PathVariable UUID id
     );
 
+    @Operation(summary = "Save analysis as meal", description = "Confirms and saves completed AI analysis as a meal history entry.", security = @SecurityRequirement(name = "bearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Meal saved from analysis"),
+            @ApiResponse(responseCode = "400", description = "Analysis is not ready or request is invalid", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized"),
+            @ApiResponse(responseCode = "403", description = "Forbidden"),
+            @ApiResponse(responseCode = "404", description = "Analysis not found"),
+            @ApiResponse(responseCode = "409", description = "Analysis already saved", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Meal save failed", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<SaveFoodAnalysisResponse> saveAnalysis(
+            @Parameter(description = "Analysis identifier", example = "54b35d30-1d29-4d6b-9850-39d0fbbddc2e") @PathVariable UUID id,
+            @Valid @RequestBody(required = false) SaveFoodAnalysisRequest request
+    );
+
     @Operation(summary = "Get analysis history", description = "Returns analyses for the current authenticated user.", security = @SecurityRequirement(name = "bearerAuth"))
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "History returned"),
             @ApiResponse(responseCode = "401", description = "Unauthorized")
     })
     ResponseEntity<List<FoodAnalysisResponse>> getHistory();
+
+    @Operation(summary = "Delete analysis from history", description = "Deletes one analysis record for the current authenticated user.", security = @SecurityRequirement(name = "bearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "History item deleted"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized"),
+            @ApiResponse(responseCode = "403", description = "Forbidden"),
+            @ApiResponse(responseCode = "404", description = "Analysis not found")
+    })
+    @DeleteMapping("/history/{id}")
+    ResponseEntity<Void> deleteHistoryItem(
+            @Parameter(description = "Analysis identifier", example = "54b35d30-1d29-4d6b-9850-39d0fbbddc2e") @PathVariable UUID id
+    );
 }

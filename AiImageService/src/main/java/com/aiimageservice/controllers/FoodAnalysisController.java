@@ -3,7 +3,10 @@ package com.aiimageservice.controllers;
 import com.aiimageservice.controllers.api.FoodAnalysisControllerApi;
 import com.aiimageservice.dtos.FoodAnalysisDetailResponse;
 import com.aiimageservice.dtos.FoodAnalysisResponse;
+import com.aiimageservice.dtos.SaveFoodAnalysisRequest;
+import com.aiimageservice.dtos.SaveFoodAnalysisResponse;
 import com.aiimageservice.services.FoodAnalysisService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -36,8 +39,24 @@ public class FoodAnalysisController implements FoodAnalysisControllerApi {
     }
 
     @Override
+    @PostMapping("/analyze/{id}/save")
+    public ResponseEntity<SaveFoodAnalysisResponse> saveAnalysis(
+            @PathVariable UUID id,
+            @RequestBody(required = false) @Valid SaveFoodAnalysisRequest request
+    ) {
+        return ResponseEntity.ok(service.saveAnalysis(id, request));
+    }
+
+    @Override
     @GetMapping("/history")
     public ResponseEntity<List<FoodAnalysisResponse>> getHistory() {
         return ResponseEntity.ok(service.getUserHistory());
+    }
+
+    @Override
+    @DeleteMapping("/history/{id}")
+    public ResponseEntity<Void> deleteHistoryItem(@PathVariable UUID id) {
+        service.deleteAnalysis(id);
+        return ResponseEntity.noContent().build();
     }
 }

@@ -33,19 +33,64 @@ public class FoodAnalysisConsumer {
             GeminiNutritionData data = geminiService.analyzeFood(img, userProfile, request.getQuestions());
 
             repository.findById(request.getAnalysisId()).ifPresent(a -> {
+                String extraInfo = data.getExtraInfo() == null ? "" : data.getExtraInfo().trim();
+
+                if (!Boolean.TRUE.equals(data.getFoodDetected())) {
+                    String message = extraInfo.isBlank()
+                            ? "На фото не еда. Загрузите фото блюда или напитка."
+                            : extraInfo;
+                    a.setStatus(AnalysisStatus.FAILED);
+                    a.setDishName(null);
+                    a.setCalories(null);
+                    a.setProtein(null);
+                    a.setCarbs(null);
+                    a.setFats(null);
+                    a.setFoodDetected(false);
+                    a.setHealthScore(null);
+                    a.setExtraInfo(message);
+                    a.setErrorMessage(message);
+                    repository.save(a);
+                    return;
+                }
+
+                if (data.getDish_name() == null || data.getDish_name().isBlank() || data.getCalories() == null) {
+                    String message = extraInfo.isBlank()
+                            ? "Не удалось корректно распознать блюдо на фото."
+                            : extraInfo;
+                    a.setStatus(AnalysisStatus.FAILED);
+                    a.setDishName(null);
+                    a.setCalories(null);
+                    a.setProtein(null);
+                    a.setCarbs(null);
+                    a.setFats(null);
+                    a.setFoodDetected(false);
+                    a.setHealthScore(null);
+                    a.setExtraInfo(message);
+                    a.setErrorMessage(message);
+                    repository.save(a);
+                    return;
+                }
+
                 a.setStatus(AnalysisStatus.COMPLETED);
                 a.setDishName(data.getDish_name());
                 a.setCalories(data.getCalories());
                 a.setProtein(data.getProtein());
                 a.setCarbs(data.getCarbs());
                 a.setFats(data.getFats());
-                a.setExtraInfo(data.getExtraInfo());
+                a.setFoodDetected(true);
+                a.setHealthScore(data.getHealthScore() == null
+                        ? null
+                        : Math.max(0, Math.min(100, data.getHealthScore())));
+                a.setExtraInfo(extraInfo);
+                a.setErrorMessage(null);
                 repository.save(a);
             });
         } catch (Exception e) {
             log.error("Failed ID: {}", request.getAnalysisId(), e);
             repository.findById(request.getAnalysisId()).ifPresent(a -> {
                 a.setStatus(AnalysisStatus.FAILED);
+                a.setFoodDetected(false);
+                a.setHealthScore(null);
                 a.setErrorMessage(e.getMessage());
                 repository.save(a);
             });

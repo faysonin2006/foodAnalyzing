@@ -14,6 +14,8 @@ import recipes.recipesfromdbservice.configs.exceptionhandler.ErrorResponse;
 import recipes.recipesfromdbservice.dtos.CardFullRecipeResponse;
 import recipes.recipesfromdbservice.dtos.CardRecipeRequest;
 import recipes.recipesfromdbservice.dtos.CardRecipeResponse;
+import recipes.recipesfromdbservice.searchml.SmartSuggestionRankRequest;
+import recipes.recipesfromdbservice.searchml.SmartSuggestionRankResponse;
 
 import java.util.List;
 
@@ -76,5 +78,50 @@ public interface RecipeControllerApi {
     })
     ResponseEntity<CardFullRecipeResponse> getRecipeById(
             @Parameter(description = "Internal recipe id", example = "204896", required = true) Long recipeId
+    );
+
+    @Operation(
+            summary = "Rerank text suggestions with ML",
+            description = "Accepts a client-provided candidate list and reorders it with the TensorFlow search model for search bars, manual meal entry and shopping suggestions.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Suggestions reranked"),
+            @ApiResponse(responseCode = "400", description = "Invalid request",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<SmartSuggestionRankResponse> rerankSuggestions(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "Suggestion rerank payload",
+                    content = @Content(
+                            schema = @Schema(implementation = SmartSuggestionRankRequest.class),
+                            examples = @ExampleObject(value = """
+                                    {
+                                      "query": "chi",
+                                      "limit": 6,
+                                      "candidates": [
+                                        {
+                                          "id": "0",
+                                          "primaryText": "Chicken breast",
+                                          "category": "Protein",
+                                          "searchTerms": ["chicken breast", "chicken"]
+                                        },
+                                        {
+                                          "id": "1",
+                                          "primaryText": "Chickpeas",
+                                          "category": "Legumes",
+                                          "searchTerms": ["chickpeas", "garbanzo"]
+                                        }
+                                      ]
+                                    }
+                                    """)
+                    )
+            )
+            SmartSuggestionRankRequest request
     );
 }

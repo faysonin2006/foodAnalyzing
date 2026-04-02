@@ -17,6 +17,7 @@ public class CardFullRecipeResponse {
     private Long recipeId;
     private String title;
     private String image;
+    private String category;
     private int ingredientsCount;
     private int instructionsCount;
 

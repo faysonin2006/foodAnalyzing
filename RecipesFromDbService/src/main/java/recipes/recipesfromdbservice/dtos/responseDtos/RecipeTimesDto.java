@@ -21,6 +21,6 @@ public class RecipeTimesDto {
     @JsonAlias({"cookTime", "cook_time"})
     private String cookTime;
 
-    @JsonAlias({"totalTime", "total_time"})
+    @JsonAlias({"totalTime", "total_time", "total"})
     private String totalTime;
 }

@@ -1,0 +1,3 @@
+-- RecipeService does not own application tables yet.
+-- This baseline migration exists to let Flyway track the service safely
+-- without recreating or deleting an existing database.

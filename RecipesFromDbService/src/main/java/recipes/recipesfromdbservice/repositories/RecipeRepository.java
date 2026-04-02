@@ -16,61 +16,96 @@ public interface RecipeRepository extends JpaRepository<RecipeCard, Long> {
 
     @Query(value = """
         SELECT
-            c.recipe_id AS recipeId,
-            c.title AS title,
-            c.image AS image,
-            c.category AS category,
-            c.ingredients_count AS ingredientsCount,
-            c.instructions_count AS instructionsCount,
-            c.nutritions::text AS nutritionsJson,
-            c.times::text AS timesJson,
-            to_json(c.block_diet_keys)::text AS blockDietKeysJson,
-            to_json(c.block_allergy_keys)::text AS blockAllergyKeysJson,
-            to_json(c.block_health_keys)::text AS blockHealthKeysJson,
-            to_json(c.caution_health_keys)::text AS cautionHealthKeysJson
-        FROM cookbook_wh.card_search_mv c
-        WHERE (:lang IS NULL OR c.lang = :lang)
-          AND (:title IS NULL OR c.title ILIKE CONCAT('%', :title, '%'))
-          AND (:category IS NULL OR c.category ILIKE CONCAT('%', :category, '%'))
-          AND (
-                COALESCE(cardinality(CAST(:requiredDietKeys AS text[])), 0) = 0
-                OR NOT (c.block_diet_keys && CAST(:requiredDietKeys AS text[]))
-              )
-          AND (
-                COALESCE(cardinality(CAST(:allergyKeys AS text[])), 0) = 0
-                OR NOT (c.block_allergy_keys && CAST(:allergyKeys AS text[]))
-              )
-          AND (
-                COALESCE(cardinality(CAST(:healthConditionKeys AS text[])), 0) = 0
-                OR NOT (c.block_health_keys && CAST(:healthConditionKeys AS text[]))
-              )
+            q.recipeId,
+            q.title,
+            q.image,
+            q.category,
+            q.searchScore,
+            q.ingredientsCount,
+            q.instructionsCount,
+            q.ingredientsJson,
+            q.nutritionsJson,
+            q.timesJson,
+            q.blockDietKeysJson,
+            q.blockAllergyKeysJson,
+            q.blockHealthKeysJson,
+            q.cautionHealthKeysJson
+        FROM (
+            SELECT
+                c.recipe_id AS recipeId,
+                c.title AS title,
+                c.image AS image,
+                c.category AS category,
+                (
+                  CASE WHEN :title IS NOT NULL AND lower(c.title) = lower(:title) THEN 100 ELSE 0 END
+                  + CASE WHEN :title IS NOT NULL AND c.title ILIKE CONCAT('%', :title, '%') THEN 60 ELSE 0 END
+                  + CASE WHEN :title IS NOT NULL AND c.ingredients::text ILIKE CONCAT('%', :title, '%') THEN 40 ELSE 0 END
+                  + CASE WHEN :title IS NOT NULL AND c.category ILIKE CONCAT('%', :title, '%') THEN 24 ELSE 0 END
+                  + COALESCE((
+                        SELECT SUM(
+                            CASE
+                                WHEN c.ingredients::text ILIKE CONCAT('%', token, '%') THEN 30
+                                WHEN c.title ILIKE CONCAT('%', token, '%') THEN 24
+                                WHEN c.category ILIKE CONCAT('%', token, '%') THEN 18
+                                ELSE 0
+                            END
+                        )
+                        FROM unnest(CAST(:includeIngredients AS text[])) token
+                    ), 0)
+                ) AS searchScore,
+                c.ingredients_count AS ingredientsCount,
+                c.instructions_count AS instructionsCount,
+                c.ingredients::text AS ingredientsJson,
+                c.nutritions::text AS nutritionsJson,
+                c.times::text AS timesJson,
+                to_json(c.block_diet_keys)::text AS blockDietKeysJson,
+                to_json(c.block_allergy_keys)::text AS blockAllergyKeysJson,
+                to_json(c.block_health_keys)::text AS blockHealthKeysJson,
+                to_json(c.caution_health_keys)::text AS cautionHealthKeysJson,
+                c.recipe_id AS sortRecipeId
+            FROM cookbook_wh.card_search_mv c
+            WHERE (:lang IS NULL OR c.lang = :lang)
+              AND (
+                    (
+                        :title IS NULL
+                        AND COALESCE(cardinality(CAST(:includeIngredients AS text[])), 0) = 0
+                    )
+                    OR c.title ILIKE CONCAT('%', :title, '%')
+                    OR c.category ILIKE CONCAT('%', :title, '%')
+                    OR c.ingredients::text ILIKE CONCAT('%', :title, '%')
+                    OR EXISTS (
+                        SELECT 1
+                        FROM unnest(CAST(:includeIngredients AS text[])) token
+                        WHERE c.title ILIKE CONCAT('%', token, '%')
+                           OR c.category ILIKE CONCAT('%', token, '%')
+                           OR c.ingredients::text ILIKE CONCAT('%', token, '%')
+                    )
+                  )
+              AND (
+                    :category IS NULL
+                    OR c.category ILIKE CONCAT('%', :category, '%')
+                  )
+        ) q
         ORDER BY
-          (
-            SELECT COUNT(*)
-            FROM unnest(c.caution_health_keys) k
-            WHERE k = ANY(CAST(:preferredHealthKeys AS text[]))
-          ) DESC,
-          CASE WHEN :sortBy = 'recipe_id'          AND :sortDir = 'asc'  THEN c.recipe_id END ASC,
-          CASE WHEN :sortBy = 'recipe_id'          AND :sortDir = 'desc' THEN c.recipe_id END DESC,
-          CASE WHEN :sortBy = 'title'              AND :sortDir = 'asc'  THEN c.title END ASC,
-          CASE WHEN :sortBy = 'title'              AND :sortDir = 'desc' THEN c.title END DESC,
-          CASE WHEN :sortBy = 'category'           AND :sortDir = 'asc'  THEN c.category END ASC,
-          CASE WHEN :sortBy = 'category'           AND :sortDir = 'desc' THEN c.category END DESC,
-          CASE WHEN :sortBy = 'ingredients_count'  AND :sortDir = 'asc'  THEN c.ingredients_count END ASC,
-          CASE WHEN :sortBy = 'ingredients_count'  AND :sortDir = 'desc' THEN c.ingredients_count END DESC,
-          CASE WHEN :sortBy = 'instructions_count' AND :sortDir = 'asc'  THEN c.instructions_count END ASC,
-          CASE WHEN :sortBy = 'instructions_count' AND :sortDir = 'desc' THEN c.instructions_count END DESC,
-          c.recipe_id DESC
+          CASE WHEN :sortBy = 'search_score' THEN q.searchScore END DESC,
+          CASE WHEN :sortBy = 'recipe_id'          AND :sortDir = 'asc'  THEN q.sortRecipeId END ASC,
+          CASE WHEN :sortBy = 'recipe_id'          AND :sortDir = 'desc' THEN q.sortRecipeId END DESC,
+          CASE WHEN :sortBy = 'title'              AND :sortDir = 'asc'  THEN q.title END ASC,
+          CASE WHEN :sortBy = 'title'              AND :sortDir = 'desc' THEN q.title END DESC,
+          CASE WHEN :sortBy = 'category'           AND :sortDir = 'asc'  THEN q.category END ASC,
+          CASE WHEN :sortBy = 'category'           AND :sortDir = 'desc' THEN q.category END DESC,
+          CASE WHEN :sortBy = 'ingredients_count'  AND :sortDir = 'asc'  THEN q.ingredientsCount END ASC,
+          CASE WHEN :sortBy = 'ingredients_count'  AND :sortDir = 'desc' THEN q.ingredientsCount END DESC,
+          CASE WHEN :sortBy = 'instructions_count' AND :sortDir = 'asc'  THEN q.instructionsCount END ASC,
+          CASE WHEN :sortBy = 'instructions_count' AND :sortDir = 'desc' THEN q.instructionsCount END DESC,
+          q.sortRecipeId DESC
         LIMIT :limit OFFSET :offset
         """, nativeQuery = true)
     List<RecipeCardListRow> findRecipes(
             @Param("lang") String lang,
             @Param("title") String title,
             @Param("category") String category,
-            @Param("requiredDietKeys") String[] requiredDietKeys,
-            @Param("preferredHealthKeys") String[] preferredHealthKeys,
-            @Param("allergyKeys") String[] allergyKeys,
-            @Param("healthConditionKeys") String[] healthConditionKeys,
+            @Param("includeIngredients") String[] includeIngredients,
             @Param("sortBy") String sortBy,
             @Param("sortDir") String sortDir,
             @Param("limit") int limit,

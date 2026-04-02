@@ -14,7 +14,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 public class CardRecipeResponse {
@@ -29,6 +29,7 @@ public class CardRecipeResponse {
 //    private List<InstructionStepDto> instructionSteps;
     private List<NutritionDto> nutritions;
     private RecipeTimesDto times;
+    private List<String> searchMatchReasons;
 
 //    private List<String> blockDietKeys;
 //    private List<String> blockAllergyKeys;
@@ -38,4 +39,3 @@ public class CardRecipeResponse {
 
 
 }
-

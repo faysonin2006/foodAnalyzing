@@ -1,0 +1,7 @@
+app/__pycache__/
+model/current/
+model/corpus.jsonl
+model/config.json
+model/metadata.json
+model/vocabulary.json
+model/*.weights.h5

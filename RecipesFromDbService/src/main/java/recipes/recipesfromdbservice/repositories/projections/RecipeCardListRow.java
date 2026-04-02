@@ -5,9 +5,11 @@ public interface RecipeCardListRow {
     String getTitle();
     String getImage();
     String getCategory();
+    Integer getSearchScore();
     Integer getIngredientsCount();
     Integer getInstructionsCount();
 
+    String getIngredientsJson();
     String getNutritionsJson();
     String getTimesJson();
 

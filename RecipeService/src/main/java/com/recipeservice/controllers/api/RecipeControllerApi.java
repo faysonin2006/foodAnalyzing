@@ -1,5 +1,8 @@
 package com.recipeservice.controllers.api;
 
+import com.recipeservice.dtos.recommendations.AddMissingIngredientsResponse;
+import com.recipeservice.dtos.recommendations.RecipeRecommendationRequest;
+import com.recipeservice.dtos.recommendations.RecipeRecommendationResponse;
 import com.recipeservice.dtos.spoonacular.SpoonAnalyzedInstructionDto;
 import com.recipeservice.dtos.spoonacular.complexSearch.SpoonacularRequest;
 import com.recipeservice.dtos.spoonacular.complexSearch.SpoonacularResponse;
@@ -64,5 +67,52 @@ public interface RecipeControllerApi {
     })
     ResponseEntity<List<SpoonAnalyzedInstructionDto>> searchInstructions(
             @Parameter(description = "Spoonacular recipe id", example = "716429", required = true) String id
+    );
+
+    @Operation(
+            summary = "Get pantry-based recipe recommendations",
+            description = "Builds recipe recommendations from pantry items and profile constraints using the local recipe database.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Recommendations returned",
+                    content = @Content(schema = @Schema(implementation = RecipeRecommendationResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid recommendation request",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "502", description = "Upstream pantry or recipe database error",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<RecipeRecommendationResponse> recommendRecipes(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true,
+                    description = "Recommendation request with size, sorting and locale options.",
+                    content = @Content(schema = @Schema(implementation = RecipeRecommendationRequest.class))
+            )
+            RecipeRecommendationRequest request
+    );
+
+    @Operation(
+            summary = "Add missing ingredients to shopping list",
+            description = "Compares recipe ingredients with pantry items and creates shopping list entries for missing ingredients.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Missing ingredients added to shopping list",
+                    content = @Content(schema = @Schema(implementation = AddMissingIngredientsResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Recipe id is invalid",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "502", description = "Upstream pantry, recipe database or shopping list error",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Unexpected error",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<AddMissingIngredientsResponse> addMissingIngredientsToShoppingList(
+            @Parameter(description = "Local recipe id from the recipe database", example = "123", required = true) Long recipeId
     );
 }

@@ -26,6 +26,7 @@ public interface RecipeRepository extends JpaRepository<RecipeCard, Long> {
             q.ingredientsJson,
             q.nutritionsJson,
             q.timesJson,
+            q.searchDocument,
             q.blockDietKeysJson,
             q.blockAllergyKeysJson,
             q.blockHealthKeysJson,
@@ -37,16 +38,20 @@ public interface RecipeRepository extends JpaRepository<RecipeCard, Long> {
                 c.image AS image,
                 c.category AS category,
                 (
-                  CASE WHEN :title IS NOT NULL AND lower(c.title) = lower(:title) THEN 100 ELSE 0 END
-                  + CASE WHEN :title IS NOT NULL AND c.title ILIKE CONCAT('%', :title, '%') THEN 60 ELSE 0 END
-                  + CASE WHEN :title IS NOT NULL AND c.ingredients::text ILIKE CONCAT('%', :title, '%') THEN 40 ELSE 0 END
-                  + CASE WHEN :title IS NOT NULL AND c.category ILIKE CONCAT('%', :title, '%') THEN 24 ELSE 0 END
+                  CASE WHEN :title IS NOT NULL AND c.title_search_text = :title THEN 220 ELSE 0 END
+                  + CASE WHEN :title IS NOT NULL AND c.title_search_text LIKE CONCAT(:title, '%') THEN 150 ELSE 0 END
+                  + CASE WHEN :title IS NOT NULL AND c.title_search_text LIKE CONCAT('%', :title, '%') THEN 120 ELSE 0 END
+                  + CASE WHEN :title IS NOT NULL AND c.search_document LIKE CONCAT('%', :title, '%') THEN 72 ELSE 0 END
+                  + CASE WHEN :title IS NOT NULL THEN CAST(GREATEST(cookbook_wh.similarity(c.title_search_text, CAST(:title AS text)), 0) * 92 AS integer) ELSE 0 END
+                  + CASE WHEN :title IS NOT NULL THEN CAST(GREATEST(cookbook_wh.similarity(c.ingredient_search_text, CAST(:title AS text)), 0) * 44 AS integer) ELSE 0 END
+                  + CASE WHEN :category IS NOT NULL AND c.category_search_text LIKE CONCAT('%', :category, '%') THEN 54 ELSE 0 END
                   + COALESCE((
                         SELECT SUM(
                             CASE
-                                WHEN c.ingredients::text ILIKE CONCAT('%', token, '%') THEN 30
-                                WHEN c.title ILIKE CONCAT('%', token, '%') THEN 24
-                                WHEN c.category ILIKE CONCAT('%', token, '%') THEN 18
+                                WHEN c.title_search_text LIKE CONCAT('%', token, '%') THEN 48
+                                WHEN c.ingredient_search_text LIKE CONCAT('%', token, '%') THEN 42
+                                WHEN c.category_search_text LIKE CONCAT('%', token, '%') THEN 28
+                                WHEN c.search_document LIKE CONCAT('%', token, '%') THEN 16
                                 ELSE 0
                             END
                         )
@@ -58,6 +63,7 @@ public interface RecipeRepository extends JpaRepository<RecipeCard, Long> {
                 c.ingredients::text AS ingredientsJson,
                 c.nutritions::text AS nutritionsJson,
                 c.times::text AS timesJson,
+                c.search_document AS searchDocument,
                 to_json(c.block_diet_keys)::text AS blockDietKeysJson,
                 to_json(c.block_allergy_keys)::text AS blockAllergyKeysJson,
                 to_json(c.block_health_keys)::text AS blockHealthKeysJson,
@@ -70,20 +76,24 @@ public interface RecipeRepository extends JpaRepository<RecipeCard, Long> {
                         :title IS NULL
                         AND COALESCE(cardinality(CAST(:includeIngredients AS text[])), 0) = 0
                     )
-                    OR c.title ILIKE CONCAT('%', :title, '%')
-                    OR c.category ILIKE CONCAT('%', :title, '%')
-                    OR c.ingredients::text ILIKE CONCAT('%', :title, '%')
+                    OR c.title_search_text LIKE CONCAT('%', :title, '%')
+                    OR c.category_search_text LIKE CONCAT('%', :title, '%')
+                    OR c.ingredient_search_text LIKE CONCAT('%', :title, '%')
+                    OR c.search_document LIKE CONCAT('%', :title, '%')
+                    OR (:title IS NOT NULL AND cookbook_wh.similarity(c.title_search_text, CAST(:title AS text)) >= 0.28)
+                    OR (:title IS NOT NULL AND cookbook_wh.similarity(c.ingredient_search_text, CAST(:title AS text)) >= 0.22)
                     OR EXISTS (
                         SELECT 1
                         FROM unnest(CAST(:includeIngredients AS text[])) token
-                        WHERE c.title ILIKE CONCAT('%', token, '%')
-                           OR c.category ILIKE CONCAT('%', token, '%')
-                           OR c.ingredients::text ILIKE CONCAT('%', token, '%')
+                        WHERE c.title_search_text LIKE CONCAT('%', token, '%')
+                           OR c.category_search_text LIKE CONCAT('%', token, '%')
+                           OR c.ingredient_search_text LIKE CONCAT('%', token, '%')
+                           OR c.search_document LIKE CONCAT('%', token, '%')
                     )
                   )
               AND (
                     :category IS NULL
-                    OR c.category ILIKE CONCAT('%', :category, '%')
+                    OR c.category_search_text LIKE CONCAT('%', :category, '%')
                   )
         ) q
         ORDER BY
@@ -117,6 +127,7 @@ public interface RecipeRepository extends JpaRepository<RecipeCard, Long> {
             c.recipe_id AS recipeId,
             c.title AS title,
             c.image AS image,
+            c.category AS category,
             c.ingredients_count AS ingredientsCount,
             c.instructions_count AS instructionsCount,
             c.ingredients::text AS ingredientsJson,

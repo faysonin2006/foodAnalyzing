@@ -31,4 +31,5 @@ public class CardFullRecipeResponse {
     private List<String> blockHealthKeys;
     private List<String> cautionHealthKeys;
     private List<ConstraintDto> constraints;
+    private List<RecipeCommentDto> comments;
 }

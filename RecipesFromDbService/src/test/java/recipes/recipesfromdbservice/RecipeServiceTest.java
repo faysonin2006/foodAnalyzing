@@ -12,15 +12,17 @@ import recipes.recipesfromdbservice.dtos.CardFullRecipeResponse;
 import recipes.recipesfromdbservice.dtos.CardRecipeRequest;
 import recipes.recipesfromdbservice.dtos.CardRecipeResponse;
 import recipes.recipesfromdbservice.dtos.Languages;
+import recipes.recipesfromdbservice.models.RecipeCommentLike;
+import recipes.recipesfromdbservice.repositories.RecipeCommentRepository;
+import recipes.recipesfromdbservice.repositories.RecipeCommentLikeRepository;
 import recipes.recipesfromdbservice.repositories.RecipeRepository;
 import recipes.recipesfromdbservice.repositories.projections.CardFullRecipeRow;
 import recipes.recipesfromdbservice.repositories.projections.RecipeCardListRow;
-import recipes.recipesfromdbservice.searchml.TensorFlowSearchReranker;
 import recipes.recipesfromdbservice.services.RecipeService;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -38,14 +40,23 @@ class RecipeServiceTest {
     private RecipeRepository recipeRepository;
 
     @Mock
-    private TensorFlowSearchReranker tensorFlowSearchReranker;
+    private RecipeCommentRepository recipeCommentRepository;
+
+    @Mock
+    private RecipeCommentLikeRepository recipeCommentLikeRepository;
 
     private RecipeService recipeService;
 
     @BeforeEach
     void setUp() {
-        recipeService = new RecipeService(recipeRepository, new ObjectMapper(), tensorFlowSearchReranker);
-        lenient().when(tensorFlowSearchReranker.rerank(any(), any())).thenReturn(Map.of());
+        recipeService = new RecipeService(
+                recipeRepository,
+                recipeCommentRepository,
+                recipeCommentLikeRepository,
+                new ObjectMapper()
+        );
+        lenient().when(recipeCommentRepository.findByRecipeIdOrderByCreatedAtAscIdAsc(any())).thenReturn(List.of());
+        lenient().when(recipeCommentLikeRepository.findByCommentIdIn(any())).thenReturn(List.of());
     }
 
     @Test
@@ -129,34 +140,10 @@ class RecipeServiceTest {
     }
 
     @Test
-    void getRecipesShouldApplyTensorFlowSemanticRerankWhenAvailable() {
-        when(recipeRepository.findRecipes(any(), any(), any(), any(), any(), any(), anyInt(), anyInt()))
-                .thenReturn(List.of(
-                        recipeRow(1L, "Weeknight Rice", "dinner", "[{\"ingredient\":\"rice\"},{\"ingredient\":\"vegetables\"}]", "[{\"nutrient\":\"Calories\",\"amount\":\"320 kcal\"}]"),
-                        recipeRow(2L, "Chicken Rice Bowl", "dinner", "[{\"ingredient\":\"chicken breast\"},{\"ingredient\":\"rice\"}]", "[{\"nutrient\":\"Calories\",\"amount\":\"410 kcal\"}]")
-                ));
-        when(tensorFlowSearchReranker.rerank(any(), any()))
-                .thenReturn(Map.of(2L, 0.91, 1L, 0.24));
-
-        List<CardRecipeResponse> response = recipeService.getRecipes(CardRecipeRequest.builder()
-                .lang(Languages.EN)
-                .title("healthy chicken rice")
-                .sortBy("search_score")
-                .sortDir("desc")
-                .page(1)
-                .size(10)
-                .build());
-
-        assertEquals(2, response.size());
-        assertEquals(2L, response.getFirst().getRecipeId());
-        assertTrue(response.getFirst().getSearchMatchReasons().contains("semantic"));
-    }
-
-    @Test
     void getRecipeShouldReturnFullRecipe() {
         when(recipeRepository.getFullRecipeInfo(7L)).thenReturn(Optional.of(fullRecipeRow()));
 
-        CardFullRecipeResponse response = recipeService.getRecipe(7L);
+        CardFullRecipeResponse response = recipeService.getRecipe(7L, null);
 
         assertEquals(7L, response.getRecipeId());
         assertEquals("Soup", response.getTitle());
@@ -166,15 +153,47 @@ class RecipeServiceTest {
 
     @Test
     void getRecipeShouldRejectInvalidId() {
-        assertThrows(BadRequestException.class, () -> recipeService.getRecipe(0L));
+        assertThrows(BadRequestException.class, () -> recipeService.getRecipe(0L, null));
     }
 
     @Test
     void getRecipeShouldThrowWhenMissing() {
         when(recipeRepository.getFullRecipeInfo(999L)).thenReturn(Optional.empty());
 
-        assertThrows(RecipeNotFoundException.class, () -> recipeService.getRecipe(999L));
+        assertThrows(RecipeNotFoundException.class, () -> recipeService.getRecipe(999L, null));
         verify(recipeRepository).getFullRecipeInfo(999L);
+    }
+
+    @Test
+    void getRecipeShouldBuildRepliesAndLikes() {
+        UUID me = UUID.randomUUID();
+        when(recipeRepository.getFullRecipeInfo(7L)).thenReturn(Optional.of(fullRecipeRow()));
+        when(recipeCommentRepository.findByRecipeIdOrderByCreatedAtAscIdAsc(7L)).thenReturn(List.of(
+                recipes.recipesfromdbservice.models.RecipeComment.builder()
+                        .id(1L)
+                        .recipeId(7L)
+                        .authorName("Anna")
+                        .body("Great soup")
+                        .build(),
+                recipes.recipesfromdbservice.models.RecipeComment.builder()
+                        .id(2L)
+                        .recipeId(7L)
+                        .parentCommentId(1L)
+                        .authorName("Boris")
+                        .body("I agree")
+                        .build()
+        ));
+        when(recipeCommentLikeRepository.findByCommentIdIn(any())).thenReturn(List.of(
+                RecipeCommentLike.builder().commentId(1L).userId(me).build(),
+                RecipeCommentLike.builder().commentId(1L).userId(UUID.randomUUID()).build()
+        ));
+
+        CardFullRecipeResponse response = recipeService.getRecipe(7L, me);
+
+        assertEquals(1, response.getComments().size());
+        assertEquals(2, response.getComments().getFirst().getLikeCount());
+        assertTrue(response.getComments().getFirst().isLikedByMe());
+        assertEquals(1, response.getComments().getFirst().getReplies().size());
     }
 
     private RecipeCardListRow recipeRow(
@@ -244,6 +263,11 @@ class RecipeServiceTest {
             @Override
             public String getTimesJson() {
                 return timesJson;
+            }
+
+            @Override
+            public String getSearchDocument() {
+                return title + " " + category;
             }
 
             @Override

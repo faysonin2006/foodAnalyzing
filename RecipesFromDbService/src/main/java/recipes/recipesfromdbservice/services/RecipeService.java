@@ -10,16 +10,20 @@ import recipes.recipesfromdbservice.constants.AppMessages;
 import recipes.recipesfromdbservice.dtos.CardFullRecipeResponse;
 import recipes.recipesfromdbservice.dtos.CardRecipeRequest;
 import recipes.recipesfromdbservice.dtos.CardRecipeResponse;
+import recipes.recipesfromdbservice.dtos.CreateRecipeCommentRequest;
 import recipes.recipesfromdbservice.dtos.responseDtos.ConstraintDto;
 import recipes.recipesfromdbservice.dtos.responseDtos.IngredientDto;
 import recipes.recipesfromdbservice.dtos.responseDtos.InstructionStepDto;
 import recipes.recipesfromdbservice.dtos.responseDtos.NutritionDto;
+import recipes.recipesfromdbservice.dtos.responseDtos.RecipeCommentDto;
 import recipes.recipesfromdbservice.dtos.responseDtos.RecipeTimesDto;
+import recipes.recipesfromdbservice.models.RecipeComment;
+import recipes.recipesfromdbservice.models.RecipeCommentLike;
+import recipes.recipesfromdbservice.repositories.RecipeCommentRepository;
+import recipes.recipesfromdbservice.repositories.RecipeCommentLikeRepository;
 import recipes.recipesfromdbservice.repositories.RecipeRepository;
 import recipes.recipesfromdbservice.repositories.projections.CardFullRecipeRow;
 import recipes.recipesfromdbservice.repositories.projections.RecipeCardListRow;
-import recipes.recipesfromdbservice.searchml.SemanticSearchCandidate;
-import recipes.recipesfromdbservice.searchml.TensorFlowSearchReranker;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -27,6 +31,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -37,12 +43,50 @@ public class RecipeService {
     private static final Pattern FIRST_NUMBER_PATTERN = Pattern.compile("(-?\\d+(?:[.,]\\d+)?)");
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 20;
-    private static final int MIN_CANDIDATE_POOL = 120;
-    private static final int CANDIDATE_POOL_MULTIPLIER = 4;
+    private static final int MAX_COMMENT_LENGTH = 1000;
+    private static final String COMMENT_NOT_FOUND_PREFIX = "Comment not found: ";
+    private static final int MIN_CANDIDATE_POOL = 60;
+    private static final int MAX_CANDIDATE_POOL = 160;
+    private static final int CANDIDATE_POOL_MULTIPLIER = 3;
+    private static final Map<String, String> PHRASE_ALIASES = Map.ofEntries(
+            Map.entry("bell peppers", "bell pepper"),
+            Map.entry("capsicums", "bell pepper"),
+            Map.entry("capsicum", "bell pepper"),
+            Map.entry("garbanzo beans", "chickpea"),
+            Map.entry("garbanzo bean", "chickpea"),
+            Map.entry("beef mince", "ground beef"),
+            Map.entry("minced beef", "ground beef"),
+            Map.entry("green onions", "green onion"),
+            Map.entry("spring onions", "green onion"),
+            Map.entry("scallions", "green onion"),
+            Map.entry("rocket leaves", "arugula"),
+            Map.entry("rocket leaf", "arugula"),
+            Map.entry("coriander leaves", "cilantro"),
+            Map.entry("coriander leaf", "cilantro")
+    );
+    private static final Map<String, String> TOKEN_ALIASES = Map.ofEntries(
+            Map.entry("aubergine", "eggplant"),
+            Map.entry("aubergines", "eggplant"),
+            Map.entry("courgette", "zucchini"),
+            Map.entry("courgettes", "zucchini"),
+            Map.entry("garbanzo", "chickpea"),
+            Map.entry("garbanzos", "chickpea"),
+            Map.entry("coriander", "cilantro"),
+            Map.entry("yoghurt", "yogurt"),
+            Map.entry("prawn", "shrimp"),
+            Map.entry("prawns", "shrimp"),
+            Map.entry("chilli", "chili"),
+            Map.entry("chilies", "chili"),
+            Map.entry("chiles", "chili"),
+            Map.entry("mince", "ground"),
+            Map.entry("minced", "ground"),
+            Map.entry("biscuits", "cookies")
+    );
 
     private final RecipeRepository recipeRepository;
+    private final RecipeCommentRepository recipeCommentRepository;
+    private final RecipeCommentLikeRepository recipeCommentLikeRepository;
     private final ObjectMapper objectMapper;
-    private final TensorFlowSearchReranker tensorFlowSearchReranker;
 
     public List<CardRecipeResponse> getRecipes(CardRecipeRequest request) {
         if (request == null) {
@@ -50,7 +94,10 @@ public class RecipeService {
         }
 
         SearchPlan plan = buildSearchPlan(request);
-        int candidatePool = Math.max(plan.page() * plan.size() * CANDIDATE_POOL_MULTIPLIER, MIN_CANDIDATE_POOL);
+        int candidatePool = Math.min(
+                Math.max(plan.page() * plan.size() * CANDIDATE_POOL_MULTIPLIER, MIN_CANDIDATE_POOL),
+                MAX_CANDIDATE_POOL
+        );
 
         List<RecipeSearchCandidate> candidates = recipeRepository.findRecipes(
                         plan.lang(),
@@ -67,7 +114,9 @@ public class RecipeService {
                 .filter(candidate -> matchesExplicitNutritionFilters(candidate, plan))
                 .toList();
 
-        List<RankedRecipeCandidate> rankedCandidates = rerankWithTensorFlow(plan, candidates);
+        List<RankedRecipeCandidate> rankedCandidates = candidates.stream()
+                .map(RankedRecipeCandidate::new)
+                .toList();
 
         int fromIndex = Math.min((plan.page() - 1) * plan.size(), rankedCandidates.size());
         int toIndex = Math.min(fromIndex + plan.size(), rankedCandidates.size());
@@ -80,18 +129,98 @@ public class RecipeService {
                 .toList();
     }
 
-    public CardFullRecipeResponse getRecipe(Long id) {
+    public CardFullRecipeResponse getRecipe(Long id, UUID currentUserId) {
         if (id == null || id <= 0) {
             throw new BadRequestException(AppMessages.RECIPE_ID_MUST_BE_POSITIVE);
         }
 
         CardFullRecipeRow row = recipeRepository.getFullRecipeInfo(id)
                 .orElseThrow(() -> new RecipeNotFoundException(AppMessages.RECIPE_NOT_FOUND_PREFIX + id));
-        return toCardFullRecipeResponse(row);
+        List<RecipeCommentDto> comments = buildCommentTree(
+                recipeCommentRepository.findByRecipeIdOrderByCreatedAtAscIdAsc(id),
+                currentUserId
+        );
+        return toCardFullRecipeResponse(row, comments);
+    }
+
+    public RecipeCommentDto addRecipeComment(
+            Long recipeId,
+            CreateRecipeCommentRequest request,
+            String userEmail,
+            UUID userId
+    ) {
+        if (recipeId == null || recipeId <= 0) {
+            throw new BadRequestException(AppMessages.RECIPE_ID_MUST_BE_POSITIVE);
+        }
+        if (userEmail == null || userEmail.isBlank()) {
+            throw new BadRequestException("Authentication is required to comment");
+        }
+        if (request == null) {
+            throw new BadRequestException(AppMessages.REQUEST_MUST_NOT_BE_NULL);
+        }
+
+        String commentBody = normalizeCommentBody(request.getText());
+        if (commentBody.isBlank()) {
+            throw new BadRequestException("Comment text must not be blank");
+        }
+        if (commentBody.length() > MAX_COMMENT_LENGTH) {
+            throw new BadRequestException("Comment is too long");
+        }
+        if (!recipeRepository.existsById(recipeId)) {
+            throw new RecipeNotFoundException(AppMessages.RECIPE_NOT_FOUND_PREFIX + recipeId);
+        }
+
+        Long parentCommentId = request.getParentCommentId();
+        if (parentCommentId != null) {
+            RecipeComment parentComment = recipeCommentRepository.findByIdAndRecipeId(parentCommentId, recipeId)
+                    .orElseThrow(() -> new BadRequestException("Parent comment not found"));
+            if (parentComment.getParentCommentId() != null) {
+                throw new BadRequestException("Replies can only be added to top-level comments");
+            }
+        }
+
+        RecipeComment comment = recipeCommentRepository.save(
+                RecipeComment.builder()
+                        .recipeId(recipeId)
+                        .parentCommentId(parentCommentId)
+                        .authorUserId(userId)
+                        .authorEmail(userEmail.trim().toLowerCase(Locale.ROOT))
+                        .authorName(buildAuthorName(userEmail))
+                        .body(commentBody)
+                        .build()
+        );
+        return toRecipeCommentDto(comment, 0, false, List.of());
+    }
+
+    public RecipeCommentDto setRecipeCommentLike(Long commentId, UUID userId, boolean liked) {
+        if (commentId == null || commentId <= 0) {
+            throw new BadRequestException("Comment id must be positive");
+        }
+        if (userId == null) {
+            throw new BadRequestException("Authentication is required to like comments");
+        }
+
+        RecipeComment comment = recipeCommentRepository.findById(commentId)
+                .orElseThrow(() -> new RecipeNotFoundException(COMMENT_NOT_FOUND_PREFIX + commentId));
+        RecipeCommentLike existingLike = recipeCommentLikeRepository.findByCommentIdAndUserId(commentId, userId).orElse(null);
+
+        if (liked && existingLike == null) {
+            recipeCommentLikeRepository.save(
+                    RecipeCommentLike.builder()
+                            .commentId(commentId)
+                            .userId(userId)
+                            .build()
+            );
+        } else if (!liked && existingLike != null) {
+            recipeCommentLikeRepository.delete(existingLike);
+        }
+
+        int likeCount = Math.toIntExact(recipeCommentLikeRepository.findByCommentIdIn(List.of(commentId)).stream().count());
+        return toRecipeCommentDto(comment, likeCount, liked, List.of());
     }
 
     private SearchPlan buildSearchPlan(CardRecipeRequest request) {
-        String lang = request.getLang() == null ? "en" : request.getLang().getLowerCaseString();
+        String lang = request.getLang() == null ? null : request.getLang().getLowerCaseString();
         int size = request.getSize() == null ? DEFAULT_PAGE_SIZE : Math.max(1, Math.min(request.getSize(), MAX_PAGE_SIZE));
         int page = request.getPage() == null ? 1 : Math.max(1, request.getPage());
 
@@ -99,8 +228,8 @@ public class RecipeService {
                 lang,
                 page,
                 size,
-                blankToNull(request.getTitle()),
-                blankToNull(request.getCategory()),
+                normalizeSearchPhrase(request.getTitle()),
+                normalizeSearchPhrase(request.getCategory()),
                 normalizeSearchTerms(request.getIncludeIngredients()),
                 normalizeSearchTerms(request.getExcludeIngredients()),
                 normalizeSortBy(request.getSortBy()),
@@ -110,83 +239,6 @@ public class RecipeService {
                 request.getMaxFats(),
                 request.getMaxCarbohydrates()
         );
-    }
-
-    private List<RankedRecipeCandidate> rerankWithTensorFlow(SearchPlan plan, List<RecipeSearchCandidate> candidates) {
-        if (candidates.isEmpty()) {
-            return List.of();
-        }
-
-        String semanticQuery = buildSemanticQuery(plan);
-        if (semanticQuery.isBlank()) {
-            return candidates.stream()
-                    .map(candidate -> new RankedRecipeCandidate(candidate, 0.0))
-                    .toList();
-        }
-
-        List<SemanticSearchCandidate> payload = candidates.stream()
-                .map(candidate -> new SemanticSearchCandidate(
-                        candidate.response().getRecipeId(),
-                        candidate.response().getTitle(),
-                        candidate.response().getCategory(),
-                        candidate.ingredientTexts()
-                ))
-                .toList();
-
-        Map<Long, Double> semanticScores = tensorFlowSearchReranker.rerank(semanticQuery, payload);
-        if (semanticScores.isEmpty()) {
-            return candidates.stream()
-                    .map(candidate -> new RankedRecipeCandidate(candidate, 0.0))
-                    .toList();
-        }
-
-        List<RankedRecipeCandidate> ranked = new ArrayList<>();
-        for (RecipeSearchCandidate candidate : candidates) {
-            long recipeId = candidate.response().getRecipeId() == null ? 0L : candidate.response().getRecipeId();
-            ranked.add(new RankedRecipeCandidate(candidate, semanticScores.getOrDefault(recipeId, 0.0)));
-        }
-
-        Map<Long, Integer> baseOrder = new LinkedHashMap<>();
-        for (int index = 0; index < ranked.size(); index++) {
-            Long recipeId = ranked.get(index).candidate().response().getRecipeId();
-            if (recipeId != null) {
-                baseOrder.put(recipeId, index);
-            }
-        }
-
-        return ranked.stream()
-                .sorted((left, right) -> {
-                    int bySemantic = Double.compare(right.semanticScore(), left.semanticScore());
-                    if (bySemantic != 0) {
-                        return bySemantic;
-                    }
-
-                    int bySqlScore = Integer.compare(right.candidate().searchScore(), left.candidate().searchScore());
-                    if (bySqlScore != 0) {
-                        return bySqlScore;
-                    }
-
-                    Integer leftIndex = baseOrder.getOrDefault(left.candidate().response().getRecipeId(), Integer.MAX_VALUE);
-                    Integer rightIndex = baseOrder.getOrDefault(right.candidate().response().getRecipeId(), Integer.MAX_VALUE);
-                    return Integer.compare(leftIndex, rightIndex);
-                })
-                .toList();
-    }
-
-    private String buildSemanticQuery(SearchPlan plan) {
-        LinkedHashSet<String> parts = new LinkedHashSet<>();
-        if (plan.title() != null && !plan.title().isBlank()) {
-            parts.add(plan.title().trim());
-        }
-        if (plan.category() != null && !plan.category().isBlank()) {
-            parts.add(plan.category().trim());
-        }
-        for (String includeIngredient : plan.includeIngredients()) {
-            if (includeIngredient != null && !includeIngredient.isBlank()) {
-                parts.add(includeIngredient.trim());
-            }
-        }
-        return String.join(" ", parts).trim();
     }
 
     private RecipeSearchCandidate toSearchCandidate(RecipeCardListRow row) {
@@ -215,18 +267,22 @@ public class RecipeService {
                         .build(),
                 ingredients,
                 nutritions,
-                defaultInt(row.getSearchScore())
+                defaultInt(row.getSearchScore()),
+                row.getSearchDocument()
         );
     }
 
     private CardRecipeResponse toResponse(RankedRecipeCandidate candidate) {
-        List<String> reasons = candidate.semanticScore() > 0 ? List.of("semantic") : List.of();
+        List<String> reasons = new ArrayList<>();
+        if (candidate.candidate().searchScore() > 0) {
+            reasons.add("text_match");
+        }
         return candidate.candidate().response().toBuilder()
                 .searchMatchReasons(reasons)
                 .build();
     }
 
-    private CardFullRecipeResponse toCardFullRecipeResponse(CardFullRecipeRow row) {
+    private CardFullRecipeResponse toCardFullRecipeResponse(CardFullRecipeRow row, List<RecipeCommentDto> comments) {
         return CardFullRecipeResponse.builder()
                 .recipeId(row.getRecipeId())
                 .title(row.getTitle())
@@ -243,7 +299,116 @@ public class RecipeService {
                 .blockHealthKeys(readJson(row.getBlockHealthKeysJson(), new TypeReference<List<String>>() {}, List.of()))
                 .cautionHealthKeys(readJson(row.getCautionHealthKeysJson(), new TypeReference<List<String>>() {}, List.of()))
                 .constraints(readJson(row.getConstraintsJson(), new TypeReference<List<ConstraintDto>>() {}, List.of()))
+                .comments(comments == null ? List.of() : comments)
                 .build();
+    }
+
+    private List<RecipeCommentDto> buildCommentTree(List<RecipeComment> comments, UUID currentUserId) {
+        if (comments == null || comments.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> commentIds = comments.stream()
+                .map(RecipeComment::getId)
+                .toList();
+        Map<Long, Integer> likeCounts = new LinkedHashMap<>();
+        Set<Long> likedIds = new LinkedHashSet<>();
+
+        for (RecipeCommentLike like : recipeCommentLikeRepository.findByCommentIdIn(commentIds)) {
+            if (like.getCommentId() == null) {
+                continue;
+            }
+            likeCounts.merge(like.getCommentId(), 1, Integer::sum);
+            if (currentUserId != null && currentUserId.equals(like.getUserId())) {
+                likedIds.add(like.getCommentId());
+            }
+        }
+
+        Map<Long, List<RecipeComment>> repliesByParent = new LinkedHashMap<>();
+        List<RecipeComment> roots = new ArrayList<>();
+        for (RecipeComment comment : comments) {
+            if (comment.getParentCommentId() == null) {
+                roots.add(comment);
+                continue;
+            }
+            repliesByParent.computeIfAbsent(comment.getParentCommentId(), ignored -> new ArrayList<>()).add(comment);
+        }
+
+        List<RecipeCommentDto> result = new ArrayList<>();
+        for (RecipeComment root : roots) {
+            List<RecipeCommentDto> replies = repliesByParent.getOrDefault(root.getId(), List.of()).stream()
+                    .map(reply -> toRecipeCommentDto(
+                            reply,
+                            likeCounts.getOrDefault(reply.getId(), 0),
+                            likedIds.contains(reply.getId()),
+                            List.of()
+                    ))
+                    .toList();
+            result.add(toRecipeCommentDto(
+                    root,
+                    likeCounts.getOrDefault(root.getId(), 0),
+                    likedIds.contains(root.getId()),
+                    replies
+            ));
+        }
+        return result;
+    }
+
+    private RecipeCommentDto toRecipeCommentDto(
+            RecipeComment comment,
+            int likeCount,
+            boolean likedByMe,
+            List<RecipeCommentDto> replies
+    ) {
+        return RecipeCommentDto.builder()
+                .id(comment.getId())
+                .recipeId(comment.getRecipeId())
+                .parentCommentId(comment.getParentCommentId())
+                .authorName(comment.getAuthorName())
+                .body(comment.getBody())
+                .createdAt(comment.getCreatedAt())
+                .likeCount(likeCount)
+                .likedByMe(likedByMe)
+                .replyCount(replies == null ? 0 : replies.size())
+                .replies(replies == null ? List.of() : replies)
+                .build();
+    }
+
+    private String normalizeCommentBody(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        return raw.replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .trim();
+    }
+
+    private String buildAuthorName(String userEmail) {
+        String normalizedEmail = userEmail == null ? "" : userEmail.trim();
+        String base = normalizedEmail;
+        int atIndex = normalizedEmail.indexOf('@');
+        if (atIndex > 0) {
+            base = normalizedEmail.substring(0, atIndex);
+        }
+        base = base.replaceAll("[._-]+", " ").replaceAll("\\s+", " ").trim();
+        if (base.isBlank()) {
+            return "User";
+        }
+
+        StringBuilder builder = new StringBuilder();
+        for (String token : base.split("\\s+")) {
+            if (token.isBlank()) {
+                continue;
+            }
+            if (!builder.isEmpty()) {
+                builder.append(' ');
+            }
+            builder.append(Character.toUpperCase(token.charAt(0)));
+            if (token.length() > 1) {
+                builder.append(token.substring(1));
+            }
+        }
+        return builder.toString().trim();
     }
 
     private boolean containsExcludedTerms(RecipeSearchCandidate candidate, String[] excludeTerms) {
@@ -362,14 +527,43 @@ public class RecipeService {
         return value.trim();
     }
 
+    private String normalizeSearchPhrase(String value) {
+        String normalized = normalizeText(blankToNull(value));
+        return normalized.isBlank() ? null : normalized;
+    }
+
     private String normalizeText(String value) {
         if (value == null) {
             return "";
         }
-        return value.toLowerCase(Locale.ROOT)
+        String normalized = value.toLowerCase(Locale.ROOT);
+        for (Map.Entry<String, String> alias : PHRASE_ALIASES.entrySet()) {
+            normalized = normalized.replaceAll(
+                    "\\b" + Pattern.quote(alias.getKey()) + "\\b",
+                    Matcher.quoteReplacement(alias.getValue())
+            );
+        }
+
+        normalized = normalized
                 .replaceAll("[^\\p{L}\\p{Nd}\\s]", " ")
                 .replaceAll("\\s+", " ")
                 .trim();
+        if (normalized.isBlank()) {
+            return normalized;
+        }
+
+        StringBuilder builder = new StringBuilder();
+        for (String token : normalized.split("\\s+")) {
+            String mappedToken = TOKEN_ALIASES.getOrDefault(token, token);
+            if (mappedToken.isBlank()) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append(' ');
+            }
+            builder.append(mappedToken);
+        }
+        return builder.toString();
     }
 
     private int defaultInt(Integer value) {
@@ -415,14 +609,15 @@ public class RecipeService {
     ) {
     }
 
-    private record RankedRecipeCandidate(RecipeSearchCandidate candidate, double semanticScore) {
+    private record RankedRecipeCandidate(RecipeSearchCandidate candidate) {
     }
 
     private record RecipeSearchCandidate(
             CardRecipeResponse response,
             List<IngredientDto> ingredients,
             List<NutritionDto> nutritions,
-            int searchScore
+            int searchScore,
+            String searchDocument
     ) {
         private List<String> ingredientTexts() {
             if (ingredients == null || ingredients.isEmpty()) {
@@ -442,7 +637,21 @@ public class RecipeService {
             return values;
         }
 
+        private List<String> keywordTerms() {
+            LinkedHashSet<String> terms = new LinkedHashSet<>();
+            collectTerms(terms, response.getTitle());
+            collectTerms(terms, response.getCategory());
+            collectTerms(terms, searchDocument);
+            return terms.stream()
+                    .filter(term -> term.length() >= 3)
+                    .limit(12)
+                    .toList();
+        }
+
         private String searchableText() {
+            if (searchDocument != null && !searchDocument.isBlank()) {
+                return searchDocument.trim().toLowerCase(Locale.ROOT);
+            }
             StringBuilder builder = new StringBuilder();
             append(builder, response.getTitle());
             append(builder, response.getCategory());
@@ -460,6 +669,17 @@ public class RecipeService {
                 builder.append(' ');
             }
             builder.append(value.trim());
+        }
+
+        private static void collectTerms(LinkedHashSet<String> target, String value) {
+            if (value == null || value.isBlank()) {
+                return;
+            }
+            for (String token : value.toLowerCase(Locale.ROOT).split("\\s+")) {
+                if (!token.isBlank()) {
+                    target.add(token.trim());
+                }
+            }
         }
     }
 }

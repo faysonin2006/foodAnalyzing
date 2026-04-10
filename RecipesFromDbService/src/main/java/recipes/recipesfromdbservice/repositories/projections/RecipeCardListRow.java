@@ -12,6 +12,7 @@ public interface RecipeCardListRow {
     String getIngredientsJson();
     String getNutritionsJson();
     String getTimesJson();
+    String getSearchDocument();
 
     String getBlockDietKeysJson();
     String getBlockAllergyKeysJson();

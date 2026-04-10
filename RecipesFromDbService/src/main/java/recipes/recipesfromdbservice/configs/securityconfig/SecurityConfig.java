@@ -3,6 +3,7 @@ package recipes.recipesfromdbservice.configs.securityconfig;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -29,6 +30,10 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/actuator/**"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/recipes/db/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/recipes/db/*/comments").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/recipes/db/comments/*/like").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/recipes/db/comments/*/like").authenticated()
                         .requestMatchers("/api/recipes/db/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()

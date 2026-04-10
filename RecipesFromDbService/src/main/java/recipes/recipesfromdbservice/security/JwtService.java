@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.security.Key;
 import java.util.Date;
+import java.util.UUID;
 import java.util.function.Function;
 
 @Service
@@ -19,6 +20,20 @@ public class JwtService {
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
+    }
+
+    public UUID extractUserId(String token) {
+        return extractClaim(token, claims -> {
+            Object raw = claims.get("userId");
+            if (raw == null) {
+                return null;
+            }
+            try {
+                return UUID.fromString(raw.toString());
+            } catch (IllegalArgumentException ignored) {
+                return null;
+            }
+        });
     }
 
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {

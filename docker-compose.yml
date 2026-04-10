@@ -344,36 +344,11 @@ services:
       SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA: ${RECIPES_DB_SCHEMA:-cookbook_wh}
       EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka:8761/eureka/
       MANAGEMENT_TRACING_EXPORT_ZIPKIN_ENDPOINT: ${MANAGEMENT_TRACING_EXPORT_ZIPKIN_ENDPOINT:-http://zipkin:9411/api/v2/spans}
-      SEARCH_ML_ENABLED: ${SEARCH_ML_ENABLED:-true}
-      SEARCH_ML_BASE_URL: ${SEARCH_ML_BASE_URL:-http://recipe-search-ml-service:8107}
-      SEARCH_ML_TIMEOUT_MS: ${SEARCH_ML_TIMEOUT_MS:-1500}
-      SEARCH_ML_MAX_CANDIDATES: ${SEARCH_ML_MAX_CANDIDATES:-120}
-      SEARCH_ML_MIN_SCORE: ${SEARCH_ML_MIN_SCORE:-0.16}
-      SEARCH_ML_FAILURE_COOLDOWN_MS: ${SEARCH_ML_FAILURE_COOLDOWN_MS:-30000}
     depends_on:
       postgres:
         condition: service_healthy
       eureka:
         condition: service_healthy
-    networks:
-      - backend
-    restart: unless-stopped
-
-  recipe-search-ml-service:
-    build:
-      context: ./RecipeSearchMlService
-    profiles: ["ml"]
-    mem_limit: 1024m
-    environment:
-      PORT: ${RECIPE_SEARCH_ML_PORT:-8107}
-      MODEL_DIR: /app/model/current
-    volumes:
-      - ./RecipeSearchMlService/model:/app/model/current
-    healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:${RECIPE_SEARCH_ML_PORT:-8107}/actuator/health || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
     networks:
       - backend
     restart: unless-stopped

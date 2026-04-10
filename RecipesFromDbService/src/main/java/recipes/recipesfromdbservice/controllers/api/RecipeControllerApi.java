@@ -14,9 +14,11 @@ import recipes.recipesfromdbservice.configs.exceptionhandler.ErrorResponse;
 import recipes.recipesfromdbservice.dtos.CardFullRecipeResponse;
 import recipes.recipesfromdbservice.dtos.CardRecipeRequest;
 import recipes.recipesfromdbservice.dtos.CardRecipeResponse;
-import recipes.recipesfromdbservice.searchml.SmartSuggestionRankRequest;
-import recipes.recipesfromdbservice.searchml.SmartSuggestionRankResponse;
+import recipes.recipesfromdbservice.dtos.CreateRecipeCommentRequest;
+import recipes.recipesfromdbservice.dtos.responseDtos.RecipeCommentDto;
 
+import java.security.Principal;
+import java.util.UUID;
 import java.util.List;
 
 @Tag(name = "Recipes DB", description = "Recipe search and recipe details backed by the local recipe database")
@@ -77,51 +79,84 @@ public interface RecipeControllerApi {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     ResponseEntity<CardFullRecipeResponse> getRecipeById(
-            @Parameter(description = "Internal recipe id", example = "204896", required = true) Long recipeId
+            @Parameter(description = "Internal recipe id", example = "204896", required = true) Long recipeId,
+            @Parameter(hidden = true) Principal principal,
+            @Parameter(hidden = true) UUID authenticatedUserId
     );
 
     @Operation(
-            summary = "Rerank text suggestions with ML",
-            description = "Accepts a client-provided candidate list and reorders it with the TensorFlow search model for search bars, manual meal entry and shopping suggestions.",
+            summary = "Add a comment to a recipe",
+            description = "Creates a new user comment for the selected recipe.",
             security = @SecurityRequirement(name = "bearerAuth")
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Suggestions reranked"),
+            @ApiResponse(responseCode = "201", description = "Comment created"),
             @ApiResponse(responseCode = "400", description = "Invalid request",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Recipe not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "500", description = "Unexpected error",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    ResponseEntity<SmartSuggestionRankResponse> rerankSuggestions(
+    ResponseEntity<RecipeCommentDto> createRecipeComment(
+            @Parameter(description = "Internal recipe id", example = "204896", required = true) Long recipeId,
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true,
-                    description = "Suggestion rerank payload",
+                    description = "Recipe comment payload",
                     content = @Content(
-                            schema = @Schema(implementation = SmartSuggestionRankRequest.class),
+                            schema = @Schema(implementation = CreateRecipeCommentRequest.class),
                             examples = @ExampleObject(value = """
                                     {
-                                      "query": "chi",
-                                      "limit": 6,
-                                      "candidates": [
-                                        {
-                                          "id": "0",
-                                          "primaryText": "Chicken breast",
-                                          "category": "Protein",
-                                          "searchTerms": ["chicken breast", "chicken"]
-                                        },
-                                        {
-                                          "id": "1",
-                                          "primaryText": "Chickpeas",
-                                          "category": "Legumes",
-                                          "searchTerms": ["chickpeas", "garbanzo"]
-                                        }
-                                      ]
+                                      "text": "Очень понравился рецепт, получилось с первого раза."
                                     }
                                     """)
                     )
             )
-            SmartSuggestionRankRequest request
+            CreateRecipeCommentRequest request,
+            @Parameter(hidden = true) Principal principal,
+            @Parameter(hidden = true) UUID authenticatedUserId
     );
+
+    @Operation(
+            summary = "Like a recipe comment",
+            description = "Adds the current user like to the selected recipe comment.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Comment liked"),
+            @ApiResponse(responseCode = "400", description = "Invalid request",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Comment not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<RecipeCommentDto> likeRecipeComment(
+            @Parameter(description = "Recipe comment id", example = "15", required = true) Long commentId,
+            @Parameter(hidden = true) Principal principal,
+            @Parameter(hidden = true) UUID authenticatedUserId
+    );
+
+    @Operation(
+            summary = "Remove like from a recipe comment",
+            description = "Removes the current user like from the selected recipe comment.",
+            security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Comment unliked"),
+            @ApiResponse(responseCode = "400", description = "Invalid request",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Comment not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<RecipeCommentDto> unlikeRecipeComment(
+            @Parameter(description = "Recipe comment id", example = "15", required = true) Long commentId,
+            @Parameter(hidden = true) Principal principal,
+            @Parameter(hidden = true) UUID authenticatedUserId
+    );
+
 }

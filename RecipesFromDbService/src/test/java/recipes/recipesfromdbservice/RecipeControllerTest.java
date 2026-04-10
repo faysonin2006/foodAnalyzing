@@ -16,17 +16,16 @@ import recipes.recipesfromdbservice.controllers.RecipeController;
 import recipes.recipesfromdbservice.dtos.CardFullRecipeResponse;
 import recipes.recipesfromdbservice.dtos.CardRecipeRequest;
 import recipes.recipesfromdbservice.dtos.CardRecipeResponse;
+import recipes.recipesfromdbservice.dtos.CreateRecipeCommentRequest;
 import recipes.recipesfromdbservice.dtos.Languages;
+import recipes.recipesfromdbservice.dtos.responseDtos.RecipeCommentDto;
 import recipes.recipesfromdbservice.services.RecipeService;
-import recipes.recipesfromdbservice.searchml.SmartSuggestionCandidate;
-import recipes.recipesfromdbservice.searchml.SmartSuggestionRankItem;
-import recipes.recipesfromdbservice.searchml.SmartSuggestionRankRequest;
-import recipes.recipesfromdbservice.searchml.SmartSuggestionRankResponse;
-import recipes.recipesfromdbservice.services.SearchSuggestionService;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -43,14 +42,11 @@ class RecipeControllerTest {
     @Mock
     private RecipeService recipeService;
 
-    @Mock
-    private SearchSuggestionService searchSuggestionService;
-
     @BeforeEach
     void setUp() {
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
-        mockMvc = MockMvcBuilders.standaloneSetup(new RecipeController(recipeService, searchSuggestionService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new RecipeController(recipeService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();
@@ -99,7 +95,7 @@ class RecipeControllerTest {
 
     @Test
     void getRecipeByIdShouldReturnRecipe() throws Exception {
-        when(recipeService.getRecipe(7L)).thenReturn(CardFullRecipeResponse.builder()
+        when(recipeService.getRecipe(eq(7L), any())).thenReturn(CardFullRecipeResponse.builder()
                 .recipeId(7L)
                 .title("Soup")
                 .category("dinner")
@@ -113,7 +109,7 @@ class RecipeControllerTest {
 
     @Test
     void getRecipeByIdShouldReturnNotFound() throws Exception {
-        when(recipeService.getRecipe(999L)).thenThrow(new RecipeNotFoundException("Recipe not found: 999"));
+        when(recipeService.getRecipe(eq(999L), any())).thenThrow(new RecipeNotFoundException("Recipe not found: 999"));
 
         mockMvc.perform(get("/api/recipes/db/999"))
                 .andExpect(status().isNotFound())
@@ -121,28 +117,47 @@ class RecipeControllerTest {
     }
 
     @Test
-    void rerankSuggestionsShouldReturnOk() throws Exception {
-        when(searchSuggestionService.rerankSuggestions(any())).thenReturn(
-                new SmartSuggestionRankResponse(List.of(
-                        new SmartSuggestionRankItem("0", 0.92),
-                        new SmartSuggestionRankItem("1", 0.55)
-                ))
+    void createRecipeCommentShouldReturnCreated() throws Exception {
+        when(recipeService.addRecipeComment(eq(7L), any(), eq("cook@example.com"), any())).thenReturn(
+                RecipeCommentDto.builder()
+                        .id(15L)
+                        .recipeId(7L)
+                        .authorName("Cook")
+                        .body("Loved this one.")
+                        .build()
         );
 
-        SmartSuggestionRankRequest request = new SmartSuggestionRankRequest(
-                "chi",
-                List.of(
-                        new SmartSuggestionCandidate("0", "Chicken breast", null, "Protein", null, List.of("chicken")),
-                        new SmartSuggestionCandidate("1", "Chickpeas", null, "Legumes", null, List.of("chickpeas"))
-                ),
-                6
-        );
+        CreateRecipeCommentRequest request = new CreateRecipeCommentRequest("Loved this one.", null);
 
-        mockMvc.perform(post("/api/recipes/db/suggestions/rerank")
+        mockMvc.perform(post("/api/recipes/db/7/comments")
+                        .principal(() -> "cook@example.com")
+                        .requestAttr("authenticatedUserId", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(15))
+                .andExpect(jsonPath("$.recipeId").value(7))
+                .andExpect(jsonPath("$.authorName").value("Cook"))
+                .andExpect(jsonPath("$.body").value("Loved this one."));
+    }
+
+    @Test
+    void likeRecipeCommentShouldReturnOk() throws Exception {
+        when(recipeService.setRecipeCommentLike(eq(15L), any(), eq(true))).thenReturn(
+                RecipeCommentDto.builder()
+                        .id(15L)
+                        .recipeId(7L)
+                        .likeCount(3)
+                        .likedByMe(true)
+                        .build()
+        );
+
+        mockMvc.perform(post("/api/recipes/db/comments/15/like")
+                        .principal(() -> "cook@example.com")
+                        .requestAttr("authenticatedUserId", UUID.randomUUID()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].id").value("0"))
-                .andExpect(jsonPath("$.items[0].score").value(0.92));
+                .andExpect(jsonPath("$.id").value(15))
+                .andExpect(jsonPath("$.likeCount").value(3))
+                .andExpect(jsonPath("$.likedByMe").value(true));
     }
 }

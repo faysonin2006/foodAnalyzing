@@ -13,7 +13,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
@@ -29,6 +32,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         final String authHeader = request.getHeader("Authorization");
         final String jwt;
         final String userEmail;
+        final UUID userId;
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
@@ -38,18 +42,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         jwt = authHeader.substring(7);
         try {
             userEmail = jwtService.extractUsername(jwt);
+            userId = jwtService.extractUserId(jwt);
 
             if (userEmail != null &&
                     SecurityContextHolder.getContext().getAuthentication() == null) {
                 if (jwtService.isTokenValid(jwt, userEmail)) {
+                    Map<String, Object> details = new HashMap<>();
+                    details.put("userId", userId);
                     UsernamePasswordAuthenticationToken authToken =
                             new UsernamePasswordAuthenticationToken(
                                     userEmail,
                                     null,
                                     new ArrayList<>()
                             );
-                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    authToken.setDetails(details);
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                    request.setAttribute("authenticatedUserId", userId);
+                    request.setAttribute("authenticatedUserEmail", userEmail);
                 }
             }
         }

@@ -1,5 +1,6 @@
 package com.userservice.common.security;
 
+import com.userservice.profile.model.UserProfile;
 import com.userservice.profile.repository.UserProfileRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -19,6 +20,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
@@ -58,10 +60,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             String userEmail = jwtService.extractUsername(token);
+            String userIdClaim = jwtService.extractClaim(token, claims -> {
+                Object raw = claims.get("userId");
+                return raw == null ? null : raw.toString();
+            });
             if (userEmail != null
                     && SecurityContextHolder.getContext().getAuthentication() == null
-                    && jwtService.isTokenValid(token, userEmail)
-                    && userProfileRepository.existsByEmail(userEmail)) {
+                    && jwtService.isTokenValid(token, userEmail)) {
+                ensureProfileExists(userEmail, userIdClaim);
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                         userEmail,
                         null,
@@ -76,5 +82,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private void ensureProfileExists(String userEmail, String userIdClaim) {
+        if (userProfileRepository.existsByEmail(userEmail)
+                || userIdClaim == null
+                || userIdClaim.isBlank()) {
+            return;
+        }
+
+        try {
+            UUID userId = UUID.fromString(userIdClaim);
+            if (userProfileRepository.existsById(userId)) {
+                return;
+            }
+
+            userProfileRepository.save(
+                    UserProfile.builder()
+                            .id(userId)
+                            .email(userEmail)
+                            .build()
+            );
+            log.info("Auto-created missing profile for {}", userEmail);
+        } catch (Exception ex) {
+            log.warn("Failed to auto-create profile for {}", userEmail, ex);
+        }
     }
 }

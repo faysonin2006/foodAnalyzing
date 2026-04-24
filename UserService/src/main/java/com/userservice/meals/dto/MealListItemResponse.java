@@ -18,7 +18,18 @@ public class MealListItemResponse {
     private UUID id;
     private String title;
     private Integer calories;
+    private Double proteins;
+    private Double fats;
+    private Double carbohydrates;
     private LocalDateTime eatenAt;
     private MealSource source;
+    private String amountEaten;
+    private String amountMode;
+    private Double eatenRatio;
+    private Double totalWeightGrams;
+    private Double eatenWeightGrams;
+    private Integer packageFractionNumerator;
+    private Integer packageFractionDenominator;
+    private Integer fullPortionCalories;
     private String imageUrl;
 }

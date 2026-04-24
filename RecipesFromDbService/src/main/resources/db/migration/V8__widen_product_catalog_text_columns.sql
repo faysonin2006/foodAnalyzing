@@ -1,0 +1,17 @@
+ALTER TABLE IF EXISTS cookbook_wh.product_catalog
+    ALTER COLUMN code TYPE TEXT,
+    ALTER COLUMN product_name TYPE TEXT,
+    ALTER COLUMN generic_name TYPE TEXT,
+    ALTER COLUMN brand_name TYPE TEXT,
+    ALTER COLUMN quantity TYPE TEXT,
+    ALTER COLUMN serving_size TYPE TEXT,
+    ALTER COLUMN categories_text TYPE TEXT,
+    ALTER COLUMN countries_text TYPE TEXT,
+    ALTER COLUMN stores_text TYPE TEXT,
+    ALTER COLUMN ingredients_text TYPE TEXT,
+    ALTER COLUMN image_url TYPE TEXT,
+    ALTER COLUMN search_text TYPE TEXT,
+    ALTER COLUMN name_search_text TYPE TEXT,
+    ALTER COLUMN brand_search_text TYPE TEXT,
+    ALTER COLUMN country_search_text TYPE TEXT,
+    ALTER COLUMN source TYPE TEXT;

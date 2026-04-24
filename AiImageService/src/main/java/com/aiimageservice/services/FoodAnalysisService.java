@@ -11,7 +11,6 @@ import com.aiimageservice.dtos.meals.MealEntryResponse;
 import com.aiimageservice.dtos.meals.enums.MealSource;
 import com.aiimageservice.exceptions.AnalysisNotFoundException;
 import com.aiimageservice.exceptions.BadRequestException;
-import com.aiimageservice.exceptions.ConflictException;
 import com.aiimageservice.exceptions.ForbiddenOperationException;
 import com.aiimageservice.exceptions.StorageException;
 import com.aiimageservice.exceptions.UpstreamServiceException;
@@ -35,6 +34,8 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class FoodAnalysisService {
+    private static final String ANALYSIS_BASIS_FULL_PORTION = "FULL_PORTION";
+    private static final String ANALYSIS_BASIS_PER_100G = "PER_100G";
 
     private final FoodAnalysisRepository repository;
     private final S3Service s3Service;
@@ -66,6 +67,7 @@ public class FoodAnalysisService {
                 .userId(userId)
                 .imageUrl(imageUrl)
                 .status(AnalysisStatus.PROCESSING)
+                .analysisBasis(resolveAnalysisBasis(questions))
                 .build();
         FoodAnalysis savedAnalysis = repository.save(analysis);
 
@@ -121,9 +123,6 @@ public class FoodAnalysisService {
         if (analysis.getStatus() != AnalysisStatus.COMPLETED) {
             throw new BadRequestException(AppMessages.ANALYSIS_NOT_COMPLETED);
         }
-        if (analysis.getSavedMealId() != null) {
-            throw new ConflictException(AppMessages.ANALYSIS_ALREADY_SAVED);
-        }
 
         CreateMealEntryInternalRequest mealRequest = buildMealRequest(analysis, request);
         MealEntryResponse mealEntryResponse;
@@ -175,8 +174,27 @@ public class FoodAnalysisService {
                 .carbohydrates(carbohydrates)
                 .eatenAt(eatenAt)
                 .source(MealSource.AI_ANALYSIS)
+                .amountEaten(effectiveRequest.getAmountEaten())
+                .amountMode(effectiveRequest.getAmountMode())
+                .eatenRatio(effectiveRequest.getEatenRatio())
+                .totalWeightGrams(effectiveRequest.getTotalWeightGrams())
+                .eatenWeightGrams(effectiveRequest.getEatenWeightGrams())
+                .packageFractionNumerator(effectiveRequest.getPackageFractionNumerator())
+                .packageFractionDenominator(effectiveRequest.getPackageFractionDenominator())
+                .fullPortionCalories(effectiveRequest.getFullPortionCalories())
+                .fullPortionProteins(effectiveRequest.getFullPortionProteins())
+                .fullPortionFats(effectiveRequest.getFullPortionFats())
+                .fullPortionCarbohydrates(effectiveRequest.getFullPortionCarbohydrates())
                 .notes(effectiveRequest.getNotes())
                 .imageUrl(analysis.getImageUrl())
                 .build();
+    }
+
+    private String resolveAnalysisBasis(String questions) {
+        String normalized = questions == null ? "" : questions.trim().toUpperCase();
+        if (normalized.contains("ANALYSIS_BASIS=" + ANALYSIS_BASIS_FULL_PORTION)) {
+            return ANALYSIS_BASIS_FULL_PORTION;
+        }
+        return ANALYSIS_BASIS_PER_100G;
     }
 }

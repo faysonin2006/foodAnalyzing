@@ -23,6 +23,17 @@ public class MealEntryResponse {
     private Double carbohydrates;
     private LocalDateTime eatenAt;
     private MealSource source;
+    private String amountEaten;
+    private String amountMode;
+    private Double eatenRatio;
+    private Double totalWeightGrams;
+    private Double eatenWeightGrams;
+    private Integer packageFractionNumerator;
+    private Integer packageFractionDenominator;
+    private Integer fullPortionCalories;
+    private Double fullPortionProteins;
+    private Double fullPortionFats;
+    private Double fullPortionCarbohydrates;
     private String notes;
     private String imageUrl;
     private LocalDateTime createdAt;

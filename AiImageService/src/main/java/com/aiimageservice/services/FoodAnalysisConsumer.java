@@ -47,6 +47,7 @@ public class FoodAnalysisConsumer {
                     a.setFats(null);
                     a.setFoodDetected(false);
                     a.setHealthScore(null);
+                    a.setEstimatedWeightGrams(null);
                     a.setExtraInfo(message);
                     a.setErrorMessage(message);
                     repository.save(a);
@@ -65,6 +66,7 @@ public class FoodAnalysisConsumer {
                     a.setFats(null);
                     a.setFoodDetected(false);
                     a.setHealthScore(null);
+                    a.setEstimatedWeightGrams(null);
                     a.setExtraInfo(message);
                     a.setErrorMessage(message);
                     repository.save(a);
@@ -81,6 +83,7 @@ public class FoodAnalysisConsumer {
                 a.setHealthScore(data.getHealthScore() == null
                         ? null
                         : Math.max(0, Math.min(100, data.getHealthScore())));
+                a.setEstimatedWeightGrams(data.getEstimatedWeightGrams());
                 a.setExtraInfo(extraInfo);
                 a.setErrorMessage(null);
                 repository.save(a);
@@ -91,6 +94,7 @@ public class FoodAnalysisConsumer {
                 a.setStatus(AnalysisStatus.FAILED);
                 a.setFoodDetected(false);
                 a.setHealthScore(null);
+                a.setEstimatedWeightGrams(null);
                 a.setErrorMessage(e.getMessage());
                 repository.save(a);
             });

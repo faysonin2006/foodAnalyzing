@@ -16,4 +16,14 @@ public class InstructionStepDto {
     private String text;
     private String durationHint;
     private String temperatureHint;
+
+    public static InstructionStepDto fromRow(recipes.recipesfromdbservice.repositories.projections.InstructionRow row) {
+        if (row == null) return null;
+        return InstructionStepDto.builder()
+                .position(row.getPosition())
+                .text(row.getText())
+                .durationHint(row.getDurationHint())
+                .temperatureHint(row.getTemperatureHint())
+                .build();
+    }
 }

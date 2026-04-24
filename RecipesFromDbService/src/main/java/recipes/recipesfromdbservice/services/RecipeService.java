@@ -242,16 +242,11 @@ public class RecipeService {
     }
 
     private RecipeSearchCandidate toSearchCandidate(RecipeCardListRow row) {
-        List<IngredientDto> ingredients = readJson(
-                row.getIngredientsJson(),
-                new TypeReference<List<IngredientDto>>() {},
-                List.of()
-        );
-        List<NutritionDto> nutritions = readJson(
-                row.getNutritionsJson(),
-                new TypeReference<List<NutritionDto>>() {},
-                List.of()
-        );
+        List<IngredientDto> ingredients = recipeRepository.findIngredientsByRecipeId(row.getRecipeId())
+                .stream().map(IngredientDto::fromRow).toList();
+        
+        List<NutritionDto> nutritions = recipeRepository.findNutritionsByRecipeId(row.getRecipeId())
+                .stream().map(NutritionDto::fromRow).toList();
 
         return new RecipeSearchCandidate(
                 CardRecipeResponse.builder()
@@ -283,6 +278,18 @@ public class RecipeService {
     }
 
     private CardFullRecipeResponse toCardFullRecipeResponse(CardFullRecipeRow row, List<RecipeCommentDto> comments) {
+        List<IngredientDto> ingredients = recipeRepository.findIngredientsByRecipeId(row.getRecipeId())
+                .stream().map(IngredientDto::fromRow).toList();
+        
+        List<InstructionStepDto> steps = recipeRepository.findInstructionsByRecipeId(row.getRecipeId())
+                .stream().map(InstructionStepDto::fromRow).toList();
+        
+        List<NutritionDto> nutritions = recipeRepository.findNutritionsByRecipeId(row.getRecipeId())
+                .stream().map(NutritionDto::fromRow).toList();
+        
+        List<ConstraintDto> constraints = recipeRepository.findConstraintsByRecipeId(row.getRecipeId())
+                .stream().map(ConstraintDto::fromRow).toList();
+
         return CardFullRecipeResponse.builder()
                 .recipeId(row.getRecipeId())
                 .title(row.getTitle())
@@ -290,15 +297,15 @@ public class RecipeService {
                 .category(row.getCategory())
                 .ingredientsCount(defaultInt(row.getIngredientsCount()))
                 .instructionsCount(defaultInt(row.getInstructionsCount()))
-                .ingredients(readJson(row.getIngredientsJson(), new TypeReference<List<IngredientDto>>() {}, List.of()))
-                .instructionSteps(readJson(row.getInstructionStepsJson(), new TypeReference<List<InstructionStepDto>>() {}, List.of()))
-                .nutritions(readJson(row.getNutritionsJson(), new TypeReference<List<NutritionDto>>() {}, List.of()))
+                .ingredients(ingredients)
+                .instructionSteps(steps)
+                .nutritions(nutritions)
                 .times(readJson(row.getTimesJson(), RecipeTimesDto.class, new RecipeTimesDto()))
                 .blockDietKeys(readJson(row.getBlockDietKeysJson(), new TypeReference<List<String>>() {}, List.of()))
                 .blockAllergyKeys(readJson(row.getBlockAllergyKeysJson(), new TypeReference<List<String>>() {}, List.of()))
                 .blockHealthKeys(readJson(row.getBlockHealthKeysJson(), new TypeReference<List<String>>() {}, List.of()))
                 .cautionHealthKeys(readJson(row.getCautionHealthKeysJson(), new TypeReference<List<String>>() {}, List.of()))
-                .constraints(readJson(row.getConstraintsJson(), new TypeReference<List<ConstraintDto>>() {}, List.of()))
+                .constraints(constraints)
                 .comments(comments == null ? List.of() : comments)
                 .build();
     }

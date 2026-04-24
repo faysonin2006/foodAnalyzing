@@ -14,4 +14,12 @@ import lombok.NoArgsConstructor;
 public class NutritionDto {
     private String nutrient;
     private String amount;
+
+    public static NutritionDto fromRow(recipes.recipesfromdbservice.repositories.projections.NutritionRow row) {
+        if (row == null) return null;
+        return NutritionDto.builder()
+                .nutrient(row.getNutrient())
+                .amount(row.getAmount())
+                .build();
+    }
 }

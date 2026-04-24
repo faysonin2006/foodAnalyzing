@@ -31,6 +31,9 @@ public class GeminiNutritionData {
     @JsonProperty("health_score")
     private Integer healthScore;
 
+    @JsonProperty("estimated_weight_grams")
+    private Integer estimatedWeightGrams;
+
     @JsonProperty("extra_info")
     private String extraInfo;
 

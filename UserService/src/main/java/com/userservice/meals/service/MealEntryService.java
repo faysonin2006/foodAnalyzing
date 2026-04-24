@@ -71,6 +71,39 @@ public class MealEntryService {
     }
 
     @Transactional
+    public MealEntryResponse updateMeal(UUID mealEntryId, CreateMealEntryRequest request) {
+        UUID userId = resolveCurrentUserId();
+        MealEntry mealEntry = mealEntryRepository.findByIdAndUserId(mealEntryId, userId)
+                .orElseThrow(() -> new MealEntryNotFoundException(AppMessages.MEAL_ENTRY_NOT_FOUND));
+
+        mealEntry.setTitle(request.getTitle());
+        mealEntry.setCalories(request.getCalories());
+        mealEntry.setProteins(request.getProteins());
+        mealEntry.setFats(request.getFats());
+        mealEntry.setCarbohydrates(request.getCarbohydrates());
+        mealEntry.setEatenAt(request.getEatenAt());
+        mealEntry.setAmountEaten(request.getAmountEaten());
+        mealEntry.setAmountMode(request.getAmountMode());
+        mealEntry.setEatenRatio(request.getEatenRatio());
+        mealEntry.setTotalWeightGrams(request.getTotalWeightGrams());
+        mealEntry.setEatenWeightGrams(request.getEatenWeightGrams());
+        mealEntry.setPackageFractionNumerator(request.getPackageFractionNumerator());
+        mealEntry.setPackageFractionDenominator(request.getPackageFractionDenominator());
+        mealEntry.setFullPortionCalories(request.getFullPortionCalories());
+        mealEntry.setFullPortionProteins(request.getFullPortionProteins());
+        mealEntry.setFullPortionFats(request.getFullPortionFats());
+        mealEntry.setFullPortionCarbohydrates(request.getFullPortionCarbohydrates());
+        mealEntry.setNotes(request.getNotes());
+        mealEntry.setImageUrl(request.getImageUrl());
+        if (request.getSource() != null) {
+            mealEntry.setSource(request.getSource());
+        }
+
+        MealEntry saved = mealEntryRepository.save(mealEntry);
+        return mealEntryMapper.toResponse(saved);
+    }
+
+    @Transactional
     public void deleteMeal(UUID mealEntryId) {
         UUID userId = resolveCurrentUserId();
         MealEntry mealEntry = mealEntryRepository.findByIdAndUserId(mealEntryId, userId)

@@ -14,6 +14,9 @@ import java.time.LocalDate;
 public class DailyAnalyticsResponse {
     private LocalDate date;
     private Integer targetCalories;
+    private Double targetProteins;
+    private Double targetFats;
+    private Double targetCarbohydrates;
     private int totalCalories;
     private double proteins;
     private double fats;

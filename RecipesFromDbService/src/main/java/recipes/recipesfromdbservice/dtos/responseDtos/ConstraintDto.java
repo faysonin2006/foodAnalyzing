@@ -20,4 +20,16 @@ public class ConstraintDto {
     private String reason;
     private String source;
     private BigDecimal confidence;
+
+    public static ConstraintDto fromRow(recipes.recipesfromdbservice.repositories.projections.ConstraintRow row) {
+        if (row == null) return null;
+        return ConstraintDto.builder()
+                .key(row.getKey())
+                .type(row.getType())
+                .status(row.getStatus())
+                .reason(row.getReason())
+                .source(row.getSource())
+                .confidence(row.getConfidence())
+                .build();
+    }
 }

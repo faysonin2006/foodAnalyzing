@@ -63,11 +63,17 @@ public class FoodAnalysis {
     @Column(name = "health_score")
     private Integer healthScore;
 
+    @Column(name = "estimated_weight_grams")
+    private Integer estimatedWeightGrams;
+
     @Column(name = "extra_info", columnDefinition = "TEXT")
     private String extraInfo;
 
     @Column(name = "error_message")
     private String errorMessage;
+
+    @Column(name = "analysis_basis", length = 32)
+    private String analysisBasis;
 
     @Column(name = "saved_meal_id")
     private UUID savedMealId;

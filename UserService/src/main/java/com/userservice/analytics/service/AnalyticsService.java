@@ -61,9 +61,14 @@ public class AnalyticsService {
                 .mapToDouble(Double::doubleValue)
                 .sum();
 
+        MacroTargets macroTargets = calculateMacroTargets(profile);
+
         return DailyAnalyticsResponse.builder()
                 .date(targetDate)
                 .targetCalories(profile.getTargetCaloriesPerDay())
+                .targetProteins(macroTargets.proteins())
+                .targetFats(macroTargets.fats())
+                .targetCarbohydrates(macroTargets.carbohydrates())
                 .totalCalories(meals.stream().map(MealEntry::getCalories).filter(v -> v != null).mapToInt(Integer::intValue).sum())
                 .proteins(proteins)
                 .fats(fats)
@@ -131,6 +136,177 @@ public class AnalyticsService {
                 .carbohydrates(meals.stream().map(MealEntry::getCarbohydrates).filter(v -> v != null).mapToDouble(Double::doubleValue).sum())
                 .totalCalories(meals.stream().map(MealEntry::getCalories).filter(v -> v != null).mapToInt(Integer::intValue).sum())
                 .build();
+    }
+
+    private MacroTargets calculateMacroTargets(UserProfile profile) {
+        Integer targetCalories = profile.getTargetCaloriesPerDay();
+        Double weight = profile.getWeight();
+        if (targetCalories == null || targetCalories <= 0) {
+            return new MacroTargets(null, null, null);
+        }
+        if (weight == null || weight <= 0) {
+            return fallbackMacroTargets(targetCalories, profile);
+        }
+
+        double preferredProteins = round1(weight * preferredProteinPerKg(profile));
+        double minimumProteins = round1(weight * minimumProteinPerKg(profile));
+        double preferredFats = round1(weight * preferredFatPerKg(profile));
+        double minimumFats = round1(weight * minimumFatPerKg(profile));
+        double targetMinimumCarbs = round1(weight * minimumCarbohydratesPerKg(profile));
+
+        double proteins = preferredProteins;
+        double fats = preferredFats;
+        double availableCarbCalories = targetCalories - proteins * 4.0 - fats * 9.0;
+
+        if (availableCarbCalories < targetMinimumCarbs * 4.0) {
+            double adjustedFats = (targetCalories - proteins * 4.0 - targetMinimumCarbs * 4.0) / 9.0;
+            fats = round1(Math.max(minimumFats, adjustedFats));
+            availableCarbCalories = targetCalories - proteins * 4.0 - fats * 9.0;
+        }
+
+        if (availableCarbCalories < 0 && proteins > minimumProteins) {
+            double adjustedProteins = (targetCalories - fats * 9.0) / 4.0;
+            proteins = round1(Math.max(minimumProteins, adjustedProteins));
+            availableCarbCalories = targetCalories - proteins * 4.0 - fats * 9.0;
+        }
+
+        double carbohydrates = round1(Math.max(0.0, availableCarbCalories / 4.0));
+        return new MacroTargets(proteins, fats, carbohydrates);
+    }
+
+    private MacroTargets fallbackMacroTargets(int targetCalories, UserProfile profile) {
+        double proteinRatio;
+        double fatRatio;
+        double carbRatio;
+
+        if (profile.getGoalType() == null) {
+            proteinRatio = 0.25;
+            fatRatio = 0.30;
+            carbRatio = 0.45;
+        } else {
+            switch (profile.getGoalType()) {
+                case LOSE_WEIGHT -> {
+                    proteinRatio = 0.30;
+                    fatRatio = 0.28;
+                    carbRatio = 0.42;
+                }
+                case GAIN_MUSCLE -> {
+                    proteinRatio = 0.28;
+                    fatRatio = 0.25;
+                    carbRatio = 0.47;
+                }
+                case MAINTAIN_WEIGHT -> {
+                    proteinRatio = 0.25;
+                    fatRatio = 0.30;
+                    carbRatio = 0.45;
+                }
+                default -> {
+                    proteinRatio = 0.25;
+                    fatRatio = 0.30;
+                    carbRatio = 0.45;
+                }
+            }
+        }
+
+        return new MacroTargets(
+                round1((targetCalories * proteinRatio) / 4.0),
+                round1((targetCalories * fatRatio) / 9.0),
+                round1((targetCalories * carbRatio) / 4.0)
+        );
+    }
+
+    private double preferredProteinPerKg(UserProfile profile) {
+        double goalBase;
+        if (profile.getGoalType() == null) {
+            goalBase = 1.6;
+        } else {
+            switch (profile.getGoalType()) {
+                case LOSE_WEIGHT -> goalBase = 1.9;
+                case GAIN_MUSCLE -> goalBase = 1.8;
+                case MAINTAIN_WEIGHT -> goalBase = 1.6;
+                default -> goalBase = 1.6;
+            }
+        }
+        return goalBase + activityProteinBonus(profile);
+    }
+
+    private double minimumProteinPerKg(UserProfile profile) {
+        double goalBase;
+        if (profile.getGoalType() == null) {
+            goalBase = 1.3;
+        } else {
+            switch (profile.getGoalType()) {
+                case LOSE_WEIGHT -> goalBase = 1.6;
+                case GAIN_MUSCLE -> goalBase = 1.6;
+                case MAINTAIN_WEIGHT -> goalBase = 1.3;
+                default -> goalBase = 1.3;
+            }
+        }
+        return goalBase + activityProteinBonus(profile) * 0.5;
+    }
+
+    private double preferredFatPerKg(UserProfile profile) {
+        if (profile.getGoalType() == null) {
+            return 0.85;
+        }
+        return switch (profile.getGoalType()) {
+            case LOSE_WEIGHT -> 0.8;
+            case GAIN_MUSCLE -> 0.8;
+            case MAINTAIN_WEIGHT -> 0.9;
+        };
+    }
+
+    private double minimumFatPerKg(UserProfile profile) {
+        if (profile.getGoalType() == null) {
+            return 0.65;
+        }
+        return switch (profile.getGoalType()) {
+            case LOSE_WEIGHT -> 0.6;
+            case GAIN_MUSCLE -> 0.6;
+            case MAINTAIN_WEIGHT -> 0.7;
+        };
+    }
+
+    private double minimumCarbohydratesPerKg(UserProfile profile) {
+        if (profile.getActivityLevel() == null) {
+            return 1.5;
+        }
+        double base = switch (profile.getActivityLevel()) {
+            case SEDENTARY -> 1.5;
+            case LIGHTLY_ACTIVE -> 2.0;
+            case MODERATELY_ACTIVE -> 2.5;
+            case VERY_ACTIVE -> 3.0;
+            case EXTRA_ACTIVE -> 3.5;
+        };
+
+        if (profile.getGoalType() == null) {
+            return base;
+        }
+        return switch (profile.getGoalType()) {
+            case LOSE_WEIGHT -> Math.max(1.2, base - 0.5);
+            case GAIN_MUSCLE -> base + 0.5;
+            case MAINTAIN_WEIGHT -> base;
+        };
+    }
+
+    private double activityProteinBonus(UserProfile profile) {
+        if (profile.getActivityLevel() == null) {
+            return 0.0;
+        }
+        return switch (profile.getActivityLevel()) {
+            case SEDENTARY -> 0.0;
+            case LIGHTLY_ACTIVE -> 0.1;
+            case MODERATELY_ACTIVE -> 0.2;
+            case VERY_ACTIVE -> 0.3;
+            case EXTRA_ACTIVE -> 0.35;
+        };
+    }
+
+    private double round1(double value) {
+        return Math.round(value * 10.0) / 10.0;
+    }
+
+    private record MacroTargets(Double proteins, Double fats, Double carbohydrates) {
     }
 
     private int getExpiringSoonCount(UUID userId, LocalDate currentDate) {

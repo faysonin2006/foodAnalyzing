@@ -57,7 +57,6 @@ public interface FoodAnalysisControllerApi {
             @ApiResponse(responseCode = "401", description = "Unauthorized"),
             @ApiResponse(responseCode = "403", description = "Forbidden"),
             @ApiResponse(responseCode = "404", description = "Analysis not found"),
-            @ApiResponse(responseCode = "409", description = "Analysis already saved", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "500", description = "Meal save failed", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     ResponseEntity<SaveFoodAnalysisResponse> saveAnalysis(

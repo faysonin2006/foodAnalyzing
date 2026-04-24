@@ -5,8 +5,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import recipes.recipesfromdbservice.models.RecipeCard;
-import recipes.recipesfromdbservice.repositories.projections.CardFullRecipeRow;
-import recipes.recipesfromdbservice.repositories.projections.RecipeCardListRow;
+import recipes.recipesfromdbservice.repositories.projections.*;
 
 import java.util.List;
 import java.util.Optional;
@@ -23,8 +22,6 @@ public interface RecipeRepository extends JpaRepository<RecipeCard, Long> {
             q.searchScore,
             q.ingredientsCount,
             q.instructionsCount,
-            q.ingredientsJson,
-            q.nutritionsJson,
             q.timesJson,
             q.searchDocument,
             q.blockDietKeysJson,
@@ -60,10 +57,8 @@ public interface RecipeRepository extends JpaRepository<RecipeCard, Long> {
                 ) AS searchScore,
                 c.ingredients_count AS ingredientsCount,
                 c.instructions_count AS instructionsCount,
-                c.ingredients::text AS ingredientsJson,
-                c.nutritions::text AS nutritionsJson,
                 c.times::text AS timesJson,
-                c.search_document AS searchDocument,
+                c.search_document::text AS searchDocument,
                 to_json(c.block_diet_keys)::text AS blockDietKeysJson,
                 to_json(c.block_allergy_keys)::text AS blockAllergyKeysJson,
                 to_json(c.block_health_keys)::text AS blockHealthKeysJson,
@@ -130,17 +125,99 @@ public interface RecipeRepository extends JpaRepository<RecipeCard, Long> {
             c.category AS category,
             c.ingredients_count AS ingredientsCount,
             c.instructions_count AS instructionsCount,
-            c.ingredients::text AS ingredientsJson,
-            c.instruction_steps::text AS instructionStepsJson,
-            c.nutritions::text AS nutritionsJson,
             c.times::text AS timesJson,
             to_json(c.block_diet_keys)::text AS blockDietKeysJson,
             to_json(c.block_allergy_keys)::text AS blockAllergyKeysJson,
             to_json(c.block_health_keys)::text AS blockHealthKeysJson,
-            to_json(c.caution_health_keys)::text AS cautionHealthKeysJson,
-            c.constraints::text AS constraintsJson
+            to_json(c.caution_health_keys)::text AS cautionHealthKeysJson
         FROM cookbook_wh.card_search_mv c
         WHERE c.recipe_id = :recipeId
         """, nativeQuery = true)
     Optional<CardFullRecipeRow> getFullRecipeInfo(@Param("recipeId") Long id);
+
+    @Query(value = """
+        SELECT
+            c.recipe_id AS recipeId,
+            c.title AS title,
+            c.image AS image,
+            c.category AS category,
+            1 AS searchScore,
+            c.ingredients_count AS ingredientsCount,
+            c.instructions_count AS instructionsCount,
+            c.times::text AS timesJson,
+            c.search_document::text AS searchDocument,
+            to_json(c.block_diet_keys)::text AS blockDietKeysJson,
+            to_json(c.block_allergy_keys)::text AS blockAllergyKeysJson,
+            to_json(c.block_health_keys)::text AS blockHealthKeysJson,
+            to_json(c.caution_health_keys)::text AS cautionHealthKeysJson,
+            c.recipe_id AS sortRecipeId
+        FROM cookbook_wh.card_search_mv c
+        JOIN cookbook_wh.nutrition_items n ON n.recipe_id = c.recipe_id
+        WHERE (:lang IS NULL OR c.lang = :lang)
+          AND (:maxCalories IS NULL OR (n.nutrient = 'calories' AND n.amount_value <= :maxCalories))
+          AND (:maxProteins IS NULL OR (n.nutrient = 'protein' AND n.amount_value <= :maxProteins))
+          AND (:maxFats IS NULL OR (n.nutrient = 'fat' AND n.amount_value <= :maxFats))
+          AND (:maxCarbohydrates IS NULL OR (n.nutrient = 'carbohydrates' AND n.amount_value <= :maxCarbohydrates))
+        GROUP BY c.recipe_id
+        LIMIT 50
+        """, nativeQuery = true)
+    List<RecipeCardListRow> findRecipesByNutrition(
+            @Param("lang") String lang,
+            @Param("maxCalories") Double maxCalories,
+            @Param("maxProteins") Double maxProteins,
+            @Param("maxFats") Double maxFats,
+            @Param("maxCarbohydrates") Double maxCarbohydrates
+    );
+
+    @Query(value = """
+        SELECT
+            rif.position AS position,
+            rif.quantity_text AS quantityText,
+            rif.quantity_value AS quantityValue,
+            u.display_name AS unit,
+            ic.display_name AS ingredient,
+            rif.note AS note,
+            rif.raw_text AS rawText
+        FROM cookbook_wh.recipe_ingredient_facts rif
+        LEFT JOIN cookbook_wh.units u ON u.id = rif.unit_id
+        LEFT JOIN cookbook_wh.ingredients_catalog ic ON ic.id = rif.ingredient_id
+        WHERE rif.recipe_id = :recipeId
+        ORDER BY rif.position
+        """, nativeQuery = true)
+    List<IngredientRow> findIngredientsByRecipeId(@Param("recipeId") Long recipeId);
+
+    @Query(value = """
+        SELECT
+            s.position AS position,
+            s.raw_text AS text,
+            s.duration_hint AS durationHint,
+            s.temperature_hint AS temperatureHint
+        FROM cookbook_wh.instruction_steps s
+        WHERE s.recipe_id = :recipeId
+        ORDER BY s.position
+        """, nativeQuery = true)
+    List<InstructionRow> findInstructionsByRecipeId(@Param("recipeId") Long recipeId);
+
+    @Query(value = """
+        SELECT
+            n.nutrient AS nutrient,
+            n.amount AS amount
+        FROM cookbook_wh.nutrition_items n
+        WHERE n.recipe_id = :recipeId
+        ORDER BY n.nutrient
+        """, nativeQuery = true)
+    List<NutritionRow> findNutritionsByRecipeId(@Param("recipeId") Long recipeId);
+
+    @Query(value = """
+        SELECT
+            rc.constraint_key AS key,
+            rc.constraint_type AS type,
+            rc.status AS status,
+            rc.reason AS reason,
+            rc.source AS source,
+            rc.confidence AS confidence
+        FROM cookbook_wh.recipe_constraints rc
+        WHERE rc.recipe_id = :recipeId
+        """, nativeQuery = true)
+    List<ConstraintRow> findConstraintsByRecipeId(@Param("recipeId") Long recipeId);
 }

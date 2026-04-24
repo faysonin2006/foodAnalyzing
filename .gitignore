@@ -6,6 +6,8 @@
 *.ipr
 *.iws
 .vscode/
+backups/
+*.docx
 
 # Build outputs
 **/target/

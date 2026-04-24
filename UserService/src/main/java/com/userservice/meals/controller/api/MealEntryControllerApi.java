@@ -58,6 +58,19 @@ public interface MealEntryControllerApi {
             @PathVariable UUID mealEntryId
     );
 
+    @Operation(summary = "Update meal entry", description = "Updates a meal entry for the authenticated user.", security = @SecurityRequirement(name = "bearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Meal entry updated"),
+            @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Meal entry not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    ResponseEntity<MealEntryResponse> updateMeal(
+            @Parameter(description = "Meal entry identifier", example = "11111111-1111-1111-1111-111111111111")
+            @PathVariable UUID mealEntryId,
+            @Valid @RequestBody CreateMealEntryRequest request
+    );
+
     @Operation(summary = "Delete meal entry", description = "Deletes a meal entry for the authenticated user.", security = @SecurityRequirement(name = "bearerAuth"))
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "Meal entry deleted"),

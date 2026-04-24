@@ -57,6 +57,39 @@ public class MealEntry {
     @Column(name = "source", nullable = false)
     private MealSource source;
 
+    @Column(name = "amount_eaten", length = 80)
+    private String amountEaten;
+
+    @Column(name = "amount_mode", length = 32)
+    private String amountMode;
+
+    @Column(name = "eaten_ratio")
+    private Double eatenRatio;
+
+    @Column(name = "total_weight_grams")
+    private Double totalWeightGrams;
+
+    @Column(name = "eaten_weight_grams")
+    private Double eatenWeightGrams;
+
+    @Column(name = "package_fraction_numerator")
+    private Integer packageFractionNumerator;
+
+    @Column(name = "package_fraction_denominator")
+    private Integer packageFractionDenominator;
+
+    @Column(name = "full_portion_calories")
+    private Integer fullPortionCalories;
+
+    @Column(name = "full_portion_proteins")
+    private Double fullPortionProteins;
+
+    @Column(name = "full_portion_fats")
+    private Double fullPortionFats;
+
+    @Column(name = "full_portion_carbohydrates")
+    private Double fullPortionCarbohydrates;
+
     @Column(name = "notes", length = 1000)
     private String notes;
 

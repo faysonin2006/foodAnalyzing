@@ -29,4 +29,17 @@ public class IngredientDto {
 
     @JsonAlias({"rawText", "raw_text", "raw", "raw_line", "rawLine"})
     private String rawText;
+
+    public static IngredientDto fromRow(recipes.recipesfromdbservice.repositories.projections.IngredientRow row) {
+        if (row == null) return null;
+        return IngredientDto.builder()
+                .position(row.getPosition())
+                .ingredient(row.getIngredient())
+                .quantityText(row.getQuantityText())
+                .quantityValue(row.getQuantityValue())
+                .unit(row.getUnit())
+                .note(row.getNote())
+                .rawText(row.getRawText())
+                .build();
+    }
 }
